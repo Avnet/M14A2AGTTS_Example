@@ -442,7 +442,7 @@ After program operation has been verified, build for the Greentea test suite usi
 
    So, rename the application source file 'source/main-x.cpp' to 'source/main-x.keepcpp'.
 
-2. Execute the command: **mbed test -m K64F -t GCC_ARM --test-spec wnc_config.json -n mbed-os-tests-netsocket-\***
+2. Execute the command: **mbed test -m K64F -t GCC_ARM --test-config wnc_config.json -n mbed-os-tests-netsocket-\***
    When running the test suite, it programs different test files into the hardware to run so execution will take
    some time to complete.  When finished, you will get a summary report similar to:
 
