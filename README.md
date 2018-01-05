@@ -3,19 +3,23 @@ These files will allow you to build a simply HTTP/HTTPS application that will ex
 # Required tools
 
 # Create Project
-1. create new project:  mbed new test
+1. create new project:  **mbed new test**
    This will also install the latest version of mbed-os
 
-3. Goto the new project folder ('test' using the above), Then:
+2. Goto the new project folder ('test' using the above), Then:
+
   a) Edit mbed_settings.py and add the path to your compiler using GCC_ARM_PATH
-  b) add BufferedSerial library: mbed add http://os.mbed.com/users/sam_grove/code/BufferedSerial/
-  c) add mbed-http library: mbed add http://os.mbed.com/teams/sandbox/code/mbed-http/
-  d) add M14A2AGTTS_Example: mbed add http://github.com/jflynn129/M14A2AGTTS_Example
+
+  b) add BufferedSerial library: **mbed add http://os.mbed.com/users/sam_grove/code/BufferedSerial/**
+
+  c) add mbed-http library: **mbed add http://os.mbed.com/teams/sandbox/code/mbed-http/**
+
+  d) add M14A2AGTTS_Example: **mbed add http://github.com/jflynn129/M14A2AGTTS_Example**
 
 # Build Application
-4.  Build the program by executing 'mbed compile -m K64F -t GCC_ARM'
+1.  Build the program by executing **'mbed compile -m K64F -t GCC_ARM'**
 
-5. Verify operation of the base project program by executing it on the target hardware.  Verify the 
+2. Verify operation of the base project program by executing it on the target hardware.  Verify the 
    program executes correctly by opening a minicom window (115200-N81) and observing the program 
    output.  This program sends a sequence of commands to httpbin.org and should resemble:
 
