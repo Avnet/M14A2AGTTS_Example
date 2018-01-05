@@ -8,13 +8,13 @@ These files will allow you to build a simply HTTP/HTTPS application that will ex
 
 2. Goto the new project folder ('test' using the above), Then:
 
-  a) Edit mbed_settings.py and add the path to your compiler using GCC_ARM_PATH
+  -Edit mbed_settings.py and add the path to your compiler using GCC_ARM_PATH
 
-  b) add BufferedSerial library: **mbed add http://os.mbed.com/users/sam_grove/code/BufferedSerial/**
+  -add BufferedSerial library: **mbed add http://os.mbed.com/users/sam_grove/code/BufferedSerial/**
 
-  c) add mbed-http library: **mbed add http://os.mbed.com/teams/sandbox/code/mbed-http/**
+  -add mbed-http library: **mbed add http://os.mbed.com/teams/sandbox/code/mbed-http/**
 
-  d) add M14A2AGTTS_Example: **mbed add http://github.com/jflynn129/M14A2AGTTS_Example**
+  -add M14A2AGTTS_Example: **mbed add http://github.com/jflynn129/M14A2AGTTS_Example**
 
 # Build Application
 1.  Build the program by executing **'mbed compile -m K64F -t GCC_ARM'**
@@ -441,7 +441,7 @@ After program operation has been verified, build for the Greentea test suite usi
 
    So, rename the application source file 'source/main-x.cpp' to 'source/main-x.keepcpp'.
 
-2. Execute the command: mbed test -m K64F -t GCC_ARM --test-spec wnc_config.json -n mbed-os-tests-netsocket-*
+2. Execute the command: **mbed test -m K64F -t GCC_ARM --test-spec wnc_config.json -n mbed-os-tests-netsocket-* **
    When running the test suite, it programs different test files into the hardware to run so execution will take
    some time to complete.  When finished, you will get a summary report similar to:
 
