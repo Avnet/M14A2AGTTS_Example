@@ -5,18 +5,17 @@ These files will allow you to build a simply HTTP/HTTPS application that will ex
 2. latest version of GNU ARM Embedded Toolchain: **https://developer.arm.com/open-source/gnu-toolchain/gnu-rm/downloads**
 
 # Create Project
-1. create new project:  **mbed new test**
-   This will also install the latest version of mbed-os
+1. clone the M14A2AGTSS_Example project: **mbed clone http://github.com/jflynn129/M14A2AGTTS_Example**
 
 2. Goto the new project folder ('test' using the above), Then:
 
-  -Edit mbed_settings.py and add the path to your compiler using GCC_ARM_PATH
+  -add the Mbed-os:  **mbed add mbed-os**
 
   -add BufferedSerial library: **mbed add http://os.mbed.com/users/sam_grove/code/BufferedSerial/**
 
   -add mbed-http library: **mbed add http://os.mbed.com/teams/sandbox/code/mbed-http/**
 
-  -add M14A2AGTTS_Example: **mbed add http://github.com/jflynn129/M14A2AGTTS_Example**
+  -Edit mbed_settings.py and add the path to your compiler using GCC_ARM_PATH
 
 # Build Application
 1.  Build the program by executing **'mbed compile -m K64F -t GCC_ARM'**
