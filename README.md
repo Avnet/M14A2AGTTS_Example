@@ -1,8 +1,8 @@
 These files will allow you to build a simply HTTP/HTTPS application that will exchange data with httpbin.org and thereby ensure the WNC14A2A driver is working correctly.
 
-==Required tools==
+# Required tools
 
-==Create Project==
+# Create Project
 1. create new project:  mbed new test
    This will also install the latest version of mbed-os
 
@@ -12,13 +12,14 @@ These files will allow you to build a simply HTTP/HTTPS application that will ex
   c) add mbed-http library: mbed add http://os.mbed.com/teams/sandbox/code/mbed-http/
   d) add M14A2AGTTS_Example: mbed add http://github.com/jflynn129/M14A2AGTTS_Example
 
-==Build Applicatioin==
+# Build Application
 4.  Build the program by executing 'mbed compile -m K64F -t GCC_ARM'
 
 5. Verify operation of the base project program by executing it on the target hardware.  Verify the 
    program executes correctly by opening a minicom window (115200-N81) and observing the program 
    output.  This program sends a sequence of commands to httpbin.org and should resemble:
-<code>
+
+> 
         Test HTTP and HTTPS interface                                                                       
         [EasyConnect] Using WNC14A2A                                                                        
         [EasyConnect] Connected to Network successfully                                                     
@@ -424,9 +425,9 @@ These files will allow you to build a simply HTTP/HTTPS application that will ex
        }
        
        - - - - - - - ALL DONE - - - - - - - 
-</code>
+> 
 
-==Build for Greentea testing==
+# Build for Greentea testing
 After program operation has been verified, build for the Greentea test suite using the following steps:
 1. There is a known issue when using Greentea (https://os.mbed.com/docs/v5.7/tools/testing-applications.html)
    whereby there cannot be a main() function outside of a TESTS directory when building and running tests. This 
@@ -441,53 +442,60 @@ After program operation has been verified, build for the Greentea test suite usi
    some time to complete.  When finished, you will get a summary report similar to:
 
 <code>
-mbedgt: test suite report:
-+--------------+---------------+--------------------------------------------+--------+--------------------+-------------+
-| target       | platform_name | test suite                                 | result | elapsed_time (sec) | copy_method |
-+--------------+---------------+--------------------------------------------+--------+--------------------+-------------+
-| K64F-GCC_ARM | K64F          | mbed-os-tests-netsocket-connectivity       | OK     | 49.19              | shell       |
-| K64F-GCC_ARM | K64F          | mbed-os-tests-netsocket-gethostbyname      | OK     | 26.62              | shell       |
-| K64F-GCC_ARM | K64F          | mbed-os-tests-netsocket-ip_parsing         | OK     | 15.82              | shell       |
-| K64F-GCC_ARM | K64F          | mbed-os-tests-netsocket-socket_sigio       | OK     | 59.7               | shell       |
-| K64F-GCC_ARM | K64F          | mbed-os-tests-netsocket-tcp_echo           | OK     | 41.52              | shell       |
-| K64F-GCC_ARM | K64F          | mbed-os-tests-netsocket-tcp_hello_world    | OK     | 42.01              | shell       |
-| K64F-GCC_ARM | K64F          | mbed-os-tests-netsocket-udp_dtls_handshake | FAIL   | 126.89             | shell       |
-| K64F-GCC_ARM | K64F          | mbed-os-tests-netsocket-udp_echo           | OK     | 63.61              | shell       |
-+--------------+---------------+--------------------------------------------+--------+--------------------+-------------+
-mbedgt: test suite results: 1 FAIL / 7 OK
-mbedgt: test case report:
-+--------------+------+--------------------------------------------+----------------------------------------+---+---+------+-------+
-| target       |platfm| test suite                                 | test case                              | p | f | rslt | time  |
-+--------------+------+--------------------------------------------+----------------------------------------+---+---+------+-------+
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-connectivity       | Bringing the network up and down       | 1 | 0 | OK   | 22.08 |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-connectivity       | Bringing the network up and down twice | 1 | 0 | OK   | 11.72 |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-gethostbyname      | DNS literal                            | 1 | 0 | OK   | 0.78  |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-gethostbyname      | DNS preference literal                 | 1 | 0 | OK   | 0.79  |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-gethostbyname      | DNS preference query                   | 1 | 0 | OK   | 0.85  |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-gethostbyname      | DNS query                              | 1 | 0 | OK   | 1.09  |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Hollowed IPv6 address                  | 1 | 0 | OK   | 0.05  |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Left-weighted IPv4 address             | 1 | 0 | OK   | 0.06  |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Left-weighted IPv6 address             | 1 | 0 | OK   | 0.06  |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Null IPv4 address                      | 1 | 0 | OK   | 0.05  |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Null IPv6 address                      | 1 | 0 | OK   | 0.05  |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Right-weighted IPv4 address            | 1 | 0 | OK   | 0.06  |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Right-weighted IPv6 address            | 1 | 0 | OK   | 0.06  |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Simple IPv4 address                    | 1 | 0 | OK   | 0.05  |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Simple IPv6 address                    | 1 | 0 | OK   | 0.06  |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-socket_sigio       | Socket Attach Test                     | 1 | 0 | OK   | 9.81  |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-socket_sigio       | Socket Detach Test                     | 1 | 0 | OK   | 9.61  |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-socket_sigio       | Socket Reattach Test                   | 1 | 0 | OK   | 4.61  |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-tcp_echo           | TCP echo                               | 1 | 0 | OK   | 25.96 |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-tcp_hello_world    | TCP hello world                        | 1 | 0 | OK   | 26.34 |
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-udp_dtls_handshake | UDP DTLS handshake                     | 0 | 1 | FAIL | 111.09|
-| K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-udp_echo           | UDP echo                               | 1 | 0 | OK   | 48.52 |
-+--------------+------+--------------------------------------------+----------------------------------------+---+---+------+-------+
-mbedgt: test case results: 1 FAIL / 21 OK
-mbedgt: completed in 425.57 sec
-mbedgt: exited with code 1
-[mbed] ERROR: "mbedgt" returned error code 1.
-[mbed] ERROR: Command "mbedgt --test-spec /home/jflynn/AvNet/test/BUILD/tests/K64F/GCC_ARM/test_spec.json -n mbed-os-tests-netsocket-*" in "/home/jflynn/AvNet/test"
----
+    mbedgt: test suite report:
+
+    +--------------+---------------+--------------------------------------------+--------+--------------------+-------------+
+    | target       | platform_name | test suite                                 | result | elapsed_time (sec) | copy_method |
+    +--------------+---------------+--------------------------------------------+--------+--------------------+-------------+
+    | K64F-GCC_ARM | K64F          | mbed-os-tests-netsocket-connectivity       | OK     | 49.19              | shell       |
+    | K64F-GCC_ARM | K64F          | mbed-os-tests-netsocket-gethostbyname      | OK     | 26.62              | shell       |
+    | K64F-GCC_ARM | K64F          | mbed-os-tests-netsocket-ip_parsing         | OK     | 15.82              | shell       |
+    | K64F-GCC_ARM | K64F          | mbed-os-tests-netsocket-socket_sigio       | OK     | 59.7               | shell       |
+    | K64F-GCC_ARM | K64F          | mbed-os-tests-netsocket-tcp_echo           | OK     | 41.52              | shell       |
+    | K64F-GCC_ARM | K64F          | mbed-os-tests-netsocket-tcp_hello_world    | OK     | 42.01              | shell       |
+    | K64F-GCC_ARM | K64F          | mbed-os-tests-netsocket-udp_dtls_handshake | FAIL   | 126.89             | shell       |
+    | K64F-GCC_ARM | K64F          | mbed-os-tests-netsocket-udp_echo           | OK     | 63.61              | shell       |
+    +--------------+---------------+--------------------------------------------+--------+--------------------+-------------+
+
+    mbedgt: test suite results: 1 FAIL / 7 OK
+    mbedgt: test case report:
+
+    +--------------+------+--------------------------------------------+----------------------------------------+---+---+------+-------+
+    | target       |platfm| test suite                                 | test case                              | p | f | rslt | time  |
+    +--------------+------+--------------------------------------------+----------------------------------------+---+---+------+-------+
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-connectivity       | Bringing the network up and down       | 1 | 0 | OK   | 22.08 |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-connectivity       | Bringing the network up and down twice | 1 | 0 | OK   | 11.72 |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-gethostbyname      | DNS literal                            | 1 | 0 | OK   | 0.78  |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-gethostbyname      | DNS preference literal                 | 1 | 0 | OK   | 0.79  |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-gethostbyname      | DNS preference query                   | 1 | 0 | OK   | 0.85  |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-gethostbyname      | DNS query                              | 1 | 0 | OK   | 1.09  |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Hollowed IPv6 address                  | 1 | 0 | OK   | 0.05  |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Left-weighted IPv4 address             | 1 | 0 | OK   | 0.06  |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Left-weighted IPv6 address             | 1 | 0 | OK   | 0.06  |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Null IPv4 address                      | 1 | 0 | OK   | 0.05  |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Null IPv6 address                      | 1 | 0 | OK   | 0.05  |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Right-weighted IPv4 address            | 1 | 0 | OK   | 0.06  |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Right-weighted IPv6 address            | 1 | 0 | OK   | 0.06  |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Simple IPv4 address                    | 1 | 0 | OK   | 0.05  |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-ip_parsing         | Simple IPv6 address                    | 1 | 0 | OK   | 0.06  |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-socket_sigio       | Socket Attach Test                     | 1 | 0 | OK   | 9.81  |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-socket_sigio       | Socket Detach Test                     | 1 | 0 | OK   | 9.61  |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-socket_sigio       | Socket Reattach Test                   | 1 | 0 | OK   | 4.61  |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-tcp_echo           | TCP echo                               | 1 | 0 | OK   | 25.96 |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-tcp_hello_world    | TCP hello world                        | 1 | 0 | OK   | 26.34 |
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-udp_dtls_handshake | UDP DTLS handshake                     | 0 | 1 | FAIL | 111.09|
+    | K64F-GCC_ARM | K64F | mbed-os-tests-netsocket-udp_echo           | UDP echo                               | 1 | 0 | OK   | 48.52 |
+    +--------------+------+--------------------------------------------+----------------------------------------+---+---+------+-------+
+
+    mbedgt: test case results: 1 FAIL / 21 OK
+    mbedgt: completed in 425.57 sec
+    mbedgt: exited with code 1
+    [mbed] ERROR: "mbedgt" returned error code 1.
+    [mbed] ERROR: Command "mbedgt --test-spec /home/jflynn/AvNet/test/BUILD/tests/K64F/GCC_ARM/test_spec.json -n mbed-os-tests-netsocket-*" in "/home/jflynn/AvNet/test"
+    ---
+
+</code>
 
 NOTE: the "UDP DTLS handshake" test is a known failure.
-</code>
+
+
