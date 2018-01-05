@@ -1,9 +1,8 @@
 These files will allow you to build a simply HTTP/HTTPS application that will exchange data with httpbin.org and thereby ensure the WNC14A2A driver is working correctly.
 
-Required tools:
+==Required tools==
 
-
-Create Project:
+==Create Project==
 1. create new project:  mbed new test
    This will also install the latest version of mbed-os
 
@@ -13,13 +12,13 @@ Create Project:
   c) add mbed-http library: mbed add http://os.mbed.com/teams/sandbox/code/mbed-http/
   d) add M14A2AGTTS_Example: mbed add http://github.com/jflynn129/M14A2AGTTS_Example
 
-Build Applicatioin:
+==Build Applicatioin==
 4.  Build the program by executing 'mbed compile -m K64F -t GCC_ARM'
 
 5. Verify operation of the base project program by executing it on the target hardware.  Verify the 
    program executes correctly by opening a minicom window (115200-N81) and observing the program 
    output.  This program sends a sequence of commands to httpbin.org and should resemble:
-
+<code>
         Test HTTP and HTTPS interface                                                                       
         [EasyConnect] Using WNC14A2A                                                                        
         [EasyConnect] Connected to Network successfully                                                     
@@ -425,8 +424,9 @@ Build Applicatioin:
        }
        
        - - - - - - - ALL DONE - - - - - - - 
+</code>
 
-Build for Greentea testin
+==Build for Greentea testing==
 After program operation has been verified, build for the Greentea test suite using the following steps:
 1. There is a known issue when using Greentea (https://os.mbed.com/docs/v5.7/tools/testing-applications.html)
    whereby there cannot be a main() function outside of a TESTS directory when building and running tests. This 
@@ -440,6 +440,7 @@ After program operation has been verified, build for the Greentea test suite usi
    When running the test suite, it programs different test files into the hardware to run so execution will take
    some time to complete.  When finished, you will get a summary report similar to:
 
+<code>
 mbedgt: test suite report:
 +--------------+---------------+--------------------------------------------+--------+--------------------+-------------+
 | target       | platform_name | test suite                                 | result | elapsed_time (sec) | copy_method |
@@ -489,4 +490,4 @@ mbedgt: exited with code 1
 ---
 
 NOTE: the "UDP DTLS handshake" test is a known failure.
-
+</code>
