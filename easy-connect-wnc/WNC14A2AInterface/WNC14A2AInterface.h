@@ -330,7 +330,8 @@ private:
     void handle_sms_event();                // Handle incoming text data
 
     char _mac_address[NSAPI_MAC_SIZE];      // local Mac
-    void debugOutput(WNCDebug *dbgOut, char * format, ...);
+    void debugOutput(const char *format, ...);
+    void debugDump_arry( const uint8_t* data, unsigned int size );
 };
 
 #endif
