@@ -12,10 +12,9 @@
  *  based on the WNC 14A2A LTE Data Module
  */
 
-#define WNC14A2A_MISC_TIMEOUT 3000
-#define WNC14A2A_RESTART_TIMEOUT 10000
-#define WNC14A2A_COMMUNICATION_TIMEOUT 100
-#define READ_EVERYMS    500
+#define READ_EVERYMS                   1000              //try getting data every milli-second(s)
+#define WNC14A2A_READ_TIMEOUT          30*READ_EVERYMS   //try for a total time of milliseconds
+#define WNC14A2A_COMMUNICATION_TIMEOUT 100              //how long (ms) to wait for a connect response
 
 
 /////////////////////////////////////////////////////
@@ -48,7 +47,7 @@ EventQueue _attach_cb;
 
 
 static WNCSOCKET _sockets[WNC14A2A_SOCKET_COUNT];
-BufferedSerial mdmUart(PTD3,PTD2,1024,1);       //UART for WNC Module
+BufferedSerial mdmUart(PTD3,PTD2,3000,1);       //UART for WNC Module
 
 //-------------------------------------------------------------------------
 //
@@ -375,13 +374,14 @@ int WNC14A2AInterface::socket_send(void *handle, const void *data, unsigned size
     debugDump_arry((const uint8_t*)data,size);
 
     _pwnc_mutex.lock();
-    if( _pwnc->write(m_active_socket, (const uint8_t*)data, size) ) 
+    if( _pwnc->write(m_active_socket, (const uint8_t*)data, size) )  {
        r = size;
+       debugOutput("write to socket_send(), successful: %d",r);
+       }
     else
        debugOutput("write to socket %d failed!\n",m_active_socket);
     _pwnc_mutex.unlock();
 
-    debugOutput("write to socket_send(), successful: %d",r);
 
     if( wnc->_callback != NULL ) {
 //        _attach_cb.call_in(50,wnc->_callback, wnc->_cb_data);
@@ -405,7 +405,8 @@ int WNC14A2AInterface::socket_send(void *handle, const void *data, unsigned size
 int WNC14A2AInterface::socket_recv(void *handle, void *data, unsigned size) 
 {
     WNCSOCKET *wnc = (WNCSOCKET *)handle;
-    size_t done, cnt;
+    volatile size_t done, cnt;
+    int total_delay=0;
     Timer t;
 
     debugOutput("socket_recv() called, read up to %d bytes",size);
@@ -420,9 +421,9 @@ int WNC14A2AInterface::socket_recv(void *handle, void *data, unsigned size)
 
     t.start();
     do {
-        if( !(t.read_ms() % READ_EVERYMS) )
-          cnt = done = _pwnc->read(m_active_socket, (uint8_t *)data, (uint32_t) size);
-        done = (cnt || (t.read_ms() > WNC14A2A_MISC_TIMEOUT))? 1:0;
+        if( !(t.read_ms() % READ_EVERYMS ) )
+            cnt = done = _pwnc->read(m_active_socket, (uint8_t *)data, (uint32_t) size);
+        done = (cnt || (t.read_ms() > WNC14A2A_READ_TIMEOUT))?1:0;
         }
     while( !done );
     t.stop();
@@ -431,6 +432,9 @@ int WNC14A2AInterface::socket_recv(void *handle, void *data, unsigned size)
         _errors = NSAPI_ERROR_DEVICE_ERROR;
         return -1;
         }
+
+    if( !cnt && done )
+        return NSAPI_ERROR_WOULD_BLOCK;
 
     debugOutput("Exit socket_recv(), return %d bytes",cnt);
 
@@ -620,11 +624,12 @@ void WNC14A2AInterface::debugDump_arry( const uint8_t* data, unsigned int size )
                 sprintf(buffer, "%02X ", data[i+k]);
                 _debugUart->puts(buffer);
                 }
+            _debugUart->puts(" -- ");
             for (k=0; k<8; k++) {
-                sprintf(buffer, "%2c", data[i+k]);
+                sprintf(buffer, "%2c", isprint(data[i+k])? data[i+k]:'.');
                 _debugUart->puts(buffer);
                 }
-            printf("\n\r");
+            _debugUart->puts("\n\r");
             }
         }
 }
