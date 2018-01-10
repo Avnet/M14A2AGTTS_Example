@@ -47,7 +47,7 @@ EventQueue _attach_cb;
 
 
 static WNCSOCKET _sockets[WNC14A2A_SOCKET_COUNT];
-BufferedSerial mdmUart(PTD3,PTD2,3000,1);       //UART for WNC Module
+BufferedSerial mdmUart(PTD3,PTD2,4000,1);       //UART for WNC Module
 
 //-------------------------------------------------------------------------
 //
