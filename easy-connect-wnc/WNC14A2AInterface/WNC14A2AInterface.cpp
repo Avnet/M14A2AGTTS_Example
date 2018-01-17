@@ -285,11 +285,8 @@ int WNC14A2AInterface::socket_connect(void *handle, const SocketAddress &address
     debugOutput("SOCKET %d CONNECTED! URL=%s; IP=%s; PORT=%d;",m_active_socket,
                 wnc->url.c_str(), wnc->addr.get_ip_address(), wnc->addr.get_port());
 
-    if( wnc->_callback != NULL ) {
-//        _attach_cb.call_in(50,wnc->_callback, wnc->_cb_data);
-//        _attach_cb.dispatch();
+    if( wnc->_callback != NULL ) 
         wnc->_callback( wnc->_cb_data );
-        }
 
     return 0;
 }
@@ -383,11 +380,8 @@ int WNC14A2AInterface::socket_send(void *handle, const void *data, unsigned size
     _pwnc_mutex.unlock();
 
 
-    if( wnc->_callback != NULL ) {
-//        _attach_cb.call_in(50,wnc->_callback, wnc->_cb_data);
-//        _attach_cb.dispatch();
+    if( wnc->_callback != NULL ) 
         wnc->_callback( wnc->_cb_data );
-        }
 
     return r;
 }  
@@ -406,7 +400,6 @@ int WNC14A2AInterface::socket_recv(void *handle, void *data, unsigned size)
 {
     WNCSOCKET *wnc = (WNCSOCKET *)handle;
     volatile size_t done, cnt;
-    int total_delay=0;
     Timer t;
 
     debugOutput("socket_recv() called, read up to %d bytes",size);
@@ -429,20 +422,19 @@ int WNC14A2AInterface::socket_recv(void *handle, void *data, unsigned size)
     t.stop();
     
     if( _pwnc->getWncStatus() != WNC_GOOD ) {
-        _errors = NSAPI_ERROR_DEVICE_ERROR;
-        return -1;
+        return _errors = NSAPI_ERROR_DEVICE_ERROR;
         }
 
-    if( !cnt && done )
-        return NSAPI_ERROR_WOULD_BLOCK;
+    if( !cnt && done ) {
+        debugOutput("Exit socket_recv(), return NSAPI_ERROR_WOULD_BLOCK");
+        _errors = NSAPI_ERROR_WOULD_BLOCK;
+        }
 
     debugOutput("Exit socket_recv(), return %d bytes",cnt);
+    debugDump_arry((const uint8_t*)data,cnt);
 
-    if( wnc->_callback != NULL ) {
-//        _attach_cb.call_in(50,wnc->_callback, wnc->_cb_data);
-//        _attach_cb.dispatch();
+    if( wnc->_callback != NULL ) 
         wnc->_callback( wnc->_cb_data );
-        }
 
     return cnt;
 }
@@ -478,8 +470,6 @@ int WNC14A2AInterface::socket_close(void *handle)
     wnc->proto  = NSAPI_TCP;   //assume TCP for now
     _errors     = NSAPI_ERROR_OK;
     if( wnc->_callback != NULL ) {
-//        _attach_cb.call_in(50,wnc->_callback, wnc->_cb_data);
-//        _attach_cb.dispatch();
         wnc->_callback( wnc->_cb_data );
         wnc->_cb_data = NULL;
         wnc->_callback= NULL;
