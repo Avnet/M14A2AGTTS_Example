@@ -28,15 +28,15 @@ These files will allow you to build a simple HTTP/HTTPS application that will ex
 1.  Build the program by executing **'mbed compile -m K64F -t GCC_ARM'**
 
 2.  When building the tests, it is possible to enable varying amounts of debug information to be output by the 
-    Network driver.  These settings are located in the 'wnc_config.json' file that is included in the project.  
-    The initial setting is to enable or disable WNC Debug output by setting 'wnc_debug' to 'true' or by leaving it
-    blank (disable debug output).  The amount of debug information output is controlled by the ‘wnc_debug_setting’.  The
-    values for this flag enabled levels from basic socket level debug, to low-level driver interactions. The current
-    default settings are wnc_debug = true, and wnd_debug_setting=4 (basic socket level debug).
+    Network driver.  These settings are located in the 'mbed_app.json' file (the wnc_config.json file is used when
+    building for Green Tea).  The initial setting is to enable or disable WNC Debug output by setting 'wnc_debug' 
+    to 'true' or by setting it to 0 to disable.  The amount of debug information output is controlled by the 
+    ‘wnc_debug_setting’.  The values for this flag enabled levels from basic socket level debug, to low-level driver 
+    interactions. The current default settings are wnc_debug = false, and wnd_debug_setting=4 (basic socket level debug).
 
-3. Verify operation of the base project program by executing it on the target hardware.  Verify the 
-   program executes correctly by opening a minicom window (115200-N81) and observing the program 
-   output.  This program sends a sequence of commands to httpbin.org and should resemble:
+3. Verify operation of the basic application program by executing it on the target hardware.  Verify the 
+   program runs correctly by opening a minicom window (115200-N81) and observing the program 
+   output.  This program flow should resemble:
 
 > 
         Test HTTP and HTTPS interface                                                                       
@@ -447,7 +447,7 @@ These files will allow you to build a simple HTTP/HTTPS application that will ex
 > 
 
 # Build for Greentea testing
-After program operation has been verified, build for the Greentea test suite using the following steps:
+After the basic application has been verified, build for the Greentea test suite using the following steps:
 1. There is a known issue when using Greentea (https://os.mbed.com/docs/v5.7/tools/testing-applications.html)
    whereby there cannot be a main() function outside of a TESTS directory when building and running tests. This 
    is because all nontest code is compiled and linked with the test code and a linker error will occur due to 

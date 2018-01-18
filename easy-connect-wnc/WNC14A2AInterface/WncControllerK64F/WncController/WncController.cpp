@@ -153,7 +153,7 @@ const char * WncController::_to_hex_string(uint8_t value)
 
 WncController::WncController(void)
 {
-    for(unsigned i; i<MAX_NUM_WNC_SOCKETS; i++)
+    for(unsigned i=0; i<MAX_NUM_WNC_SOCKETS; i++)
         m_sSock[i] = defaultSockStruct;
 }
 
@@ -212,7 +212,7 @@ size_t WncController::sendCustomCmd(const char * cmd, char * resp, size_t sizeRe
     string * respStr;
     
     if (sizeRespBuf > 0) {
-        AtCmdErr_e r = at_send_wnc_cmd(cmd, &respStr, ms_timeout);
+        at_send_wnc_cmd(cmd, &respStr, ms_timeout);
         strncpy(resp, respStr->c_str(), sizeRespBuf);
         if (respStr->size() > sizeRespBuf)
             dbgPuts("sendCustomCmd truncated!");
@@ -354,7 +354,7 @@ bool WncController::openSocket(uint16_t numSock, uint16_t port, bool tcp, uint16
         
         int16_t numWncSock = at_sockopen_wnc(m_sSock[numSock].myIpAddressStr.c_str(), port, numSock, tcp, timeOutSec);
         m_sSock[numSock].numWncSock = numWncSock;
-        if (numWncSock > 0 && numWncSock <= MAX_NUM_WNC_SOCKETS)
+        if (numWncSock > 0 && numWncSock <= (uint16_t)MAX_NUM_WNC_SOCKETS)
             m_sSock[numSock].open = true;
         else {
             m_sSock[numSock].open = false;
@@ -786,7 +786,7 @@ void WncController::closeOpenSocket(uint16_t numSock)
 
         int numWncSock = at_sockopen_wnc(m_sSock[numSock].myIpAddressStr.c_str(), m_sSock[numSock].myPort, numSock, m_sSock[numSock].isTcp, m_sSock[numSock].timeOutSec);
         m_sSock[numSock].numWncSock = numWncSock;
-        if (numWncSock > 0 && numWncSock <= MAX_NUM_WNC_SOCKETS)
+        if (numWncSock > 0 && numWncSock <= (int)MAX_NUM_WNC_SOCKETS)
             m_sSock[numSock].open = true;
         else {
             m_sSock[numSock].open = false;
@@ -821,15 +821,23 @@ bool WncController::at_geticcid_wnc(string * iccid)
     if (r != WNC_AT_CMD_OK || respStr->size() == 0)
         return (false);
 
-    size_t pos = respStr->find("AT%CCID");
+    // New Firmware versions respond to the %CCID command with "%CCID:"
+    // but old version respond with "AT%CCID", so check to see which we have
+    size_t pos = respStr->find(":");
+    if (pos == string::npos) 
+        pos = respStr->find("AT%CCID");
+    else 
+        pos = respStr->find("%CCID");
+
     if (pos == string::npos)
         return (false);
-    
+
+    pos += 7; // Advanced to the number
+
     size_t posOK = respStr->rfind("OK");
     if (posOK == string::npos)
         return (false);
 
-    pos += 7; // Advanced to the number
     *iccid = respStr->substr(pos, posOK - pos);
     
     return (true);
@@ -1447,7 +1455,7 @@ bool WncController::at_saveSMStext_wnc(const char * const phoneNum, const char *
                 cmdStr = text;
                 dbgPuts("TX: ", false); dbgPutsNoTime(cmdStr.c_str());
                 cmdStr += "\x1A";  // <CTRL>-Z is what tells the WNC the message is complete to save!
-                AtCmdErr_e r = mdmSendAtCmdRsp(cmdStr.c_str(), 10000, &respStr);
+                mdmSendAtCmdRsp(cmdStr.c_str(), 10000, &respStr);
                 dbgPuts("RX: ", false); dbgPutsNoTime(respStr.c_str());
                 if (respStr.size() > 0) {
                     // respStr will have the SMS index
@@ -1712,7 +1720,7 @@ WncController::AtCmdErr_e WncController::at_sockread_wnc(string * pS, uint16_t n
 
     string * pRespStr;
     string cmd_str;
-    size_t pos_start, pos_end;
+    size_t pos_start=0, pos_end=0;
     int i;
     
     pS->erase();  // Start with a fresh string
@@ -1770,7 +1778,7 @@ WncController::AtCmdErr_e WncController::at_sockread_wnc(uint8_t * pS, uint16_t 
     if ((n > 0) && (n <= MAX_WNC_READ_BYTES)) {
         string * pRespStr;
         string cmd_str;
-        size_t pos_start, pos_end;
+        size_t pos_start=0, pos_end=0;
         int i;
 
         if (isTcp == true)
