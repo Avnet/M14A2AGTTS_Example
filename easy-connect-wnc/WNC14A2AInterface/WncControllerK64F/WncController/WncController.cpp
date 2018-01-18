@@ -1528,6 +1528,13 @@ bool WncController::at_init_wnc(bool hardReset)
   //  I have seen re-trying commands make it worse.
   if (cmdRes != WNC_AT_CMD_OK)
       return (false);
+
+  // Disable unsolicited RRCSTATE responses. These are supposed to be off
+  // by default byt have been found to be active.
+  // This problem introduced in: NQ_MPSS_IMA3_v10.58.174043 LTE-M firmware
+  cmdRes = at_send_wnc_cmd("AT%NOTIFYEV=\"ALL\",0", &pRespStr, m_sCmdTimeoutMs);
+  if (cmdRes != WNC_AT_CMD_OK)
+      return (false);
   
   cmdRes = at_send_wnc_cmd("AT@INTERNET=1", &pRespStr, m_sCmdTimeoutMs);
   if (cmdRes != WNC_AT_CMD_OK)
@@ -1620,15 +1627,16 @@ bool WncController::at_dnsresolve_wnc(const char * s, string * ipStr)
     str += "\"";
     r = sendWncCmd(str.c_str(), &pRespStr, WNC_DNS_RESOLVE_WAIT_MS);
     if (r == WNC_AT_CMD_OK && pRespStr->size() > 0) {
-        size_t pos_start = pRespStr->find(":\"") + 2;
-        if (pos_start !=  string::npos) {
-            size_t pos_end = pRespStr->find("\"", pos_start) - 1;
-            if (pos_end != string::npos) {
-                if (pos_end > pos_start) {
-                    // Make a copy for use later (the source string is re-used)
-                    *ipStr = pRespStr->substr(pos_start, pos_end - pos_start + 1);
-                    return (true);
-                }
+        size_t pos_start = pRespStr->find("ON:\""); 
+        size_t pos_end = pRespStr->find("\"", (pos_start + 4));
+        if ((pos_start !=  string::npos) && (pos_end != string::npos)) {
+            pos_start += 4;
+            pos_end -= 1;
+  
+            if (pos_end > pos_start) {
+                // Make a copy for use later (the source string is re-used)
+                *ipStr = pRespStr->substr(pos_start, pos_end - pos_start + 1);
+                return (true);
             }
         }
     }
