@@ -1,5 +1,9 @@
 These files will allow you to build a simply HTTP/HTTPS application that will exchange data with httpbin.org and thereby ensure the WNC14A2A driver is working correctly.
 
+# Note
+  -The following firmware versions running on the WNC14A2A have been tested against: 
+    MPSS: M14A2A_V11.50.164451 APSS: M14A2A_V11.53.164451
+    MPSS: IMA3_V10.58.174043   APSS: IMA3_V10.52.174043
 # Required tools
 1. mbed-cli (version 1.3.0 or later)
 2. latest version of GNU ARM Embedded Toolchain: **https://developer.arm.com/open-source/gnu-toolchain/gnu-rm/downloads**

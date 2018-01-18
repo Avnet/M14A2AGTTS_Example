@@ -1530,7 +1530,7 @@ bool WncController::at_init_wnc(bool hardReset)
       return (false);
 
   // Disable unsolicited RRCSTATE responses. These are supposed to be off
-  // by default byt have been found to be active.
+  // by default but have been found to be active.
   // This problem introduced in: NQ_MPSS_IMA3_v10.58.174043 LTE-M firmware
   cmdRes = at_send_wnc_cmd("AT%NOTIFYEV=\"ALL\",0", &pRespStr, m_sCmdTimeoutMs);
   if (cmdRes != WNC_AT_CMD_OK)
