@@ -12,7 +12,7 @@ These files will allow you to build a simply HTTP/HTTPS application that will ex
 2. latest version of GNU ARM Embedded Toolchain: **https://developer.arm.com/open-source/gnu-toolchain/gnu-rm/downloads**
 
 # Create Project
-1. Import the M14A2AGTSS_Example project: **mbed import http://github.com/jflynn129/M14A2AGTTS_Example**
+1. Import the M14A2AGTSS_Example project: **mbed import http://github.com/Avnet/M14A2AGTTS_Example**
 
 2. Goto the M14A2AGTSS_Example folder, Then:
 
