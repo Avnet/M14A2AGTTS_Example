@@ -1,4 +1,4 @@
-These files will allow you to build a simply HTTP/HTTPS application that will exchange data with httpbin.org and thereby ensure the WNC14A2A driver is working correctly.
+These files will allow you to build a simple HTTP/HTTPS application that will exchange data with httpbin.org and ensure the WNC14A2A driver is working correctly.
 
 # Note
   -The following firmware versions running on the WNC14A2A have been tested against: 

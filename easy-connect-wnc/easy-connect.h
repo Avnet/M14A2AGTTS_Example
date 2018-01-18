@@ -10,6 +10,7 @@
 #define WIFI_ODIN         5
 #define WIFI_RTW          6
 #define CELLULAR_ONBOARD  7
+#define WNC14A2A          8
 
 #if MBED_CONF_APP_NETWORK_INTERFACE == WIFI_ESP8266
 #include "ESP8266Interface.h"

@@ -23,6 +23,10 @@
             "help" : "Some servers send a prefix before echoed message",
             "value" : "\"u-blox AG TCP/UDP test service\\n\""
         },
+        "network-interface":{
+            "help": "Options are WNC14A2A",
+            "value": "WNC14A2A"
+        },
         "wnc_debug": {
             "help" : "enable or disable WNC debug messages.",
             "value": "true"
