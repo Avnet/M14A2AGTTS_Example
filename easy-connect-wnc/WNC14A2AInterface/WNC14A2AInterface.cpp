@@ -4,6 +4,7 @@
 #include "mbed_events.h"
 
 #include <string> 
+#include <ctype.h>
 
 #define TRACE_GROUP "WNCd"
 
