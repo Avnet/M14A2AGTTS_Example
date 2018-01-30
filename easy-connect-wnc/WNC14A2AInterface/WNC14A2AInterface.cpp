@@ -1,5 +1,7 @@
 
-/* WNC14A2A implementation of NetworkInterfaceAPI
+/* 
+ * copyright (c) 2017-2018, James Flynn
+ * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -10,10 +12,21 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
  
+/**
+*   @file   WNC14A2AInterface.cpp
+*   @brief  WNC14A2A implementation of NetworkInterfaceAPI for Mbed OS
+*
+*   @author James Flynn
+*
+*   @date   1-Feb-2018
+*/
+
 #include "WNC14A2AInterface.h"
 #include <Thread.h>
 #include "mbed_events.h"
@@ -122,9 +135,14 @@ WNC14A2AInterface::WNC14A2AInterface(WNCDebug *dbg) :
 }
 
 /*-------------------------------------------------------------------------
- * standard destructor... free up allocated memory
  */
 
+/**
+* Standard destructor... free up allocated memory
+* @author James Flynn
+* @param  none
+* @date 1-Feb-2018
+*/
 WNC14A2AInterface::~WNC14A2AInterface()
 {
     delete _pwnc;  //free the existing WncControllerK64F object
@@ -140,6 +158,7 @@ WNC14A2AInterface::~WNC14A2AInterface()
  *        *password - NOT CURRENTLY USED
  *
  * Output: none
+ne
  *
  * Return: nsapi_error_t
  */
@@ -800,12 +819,15 @@ int WNC14A2AInterface::socket_recvfrom(void *handle, SocketAddress *address, voi
 }
 
 
-//-------------------------------------------------------------------------
-//receives data from a socket
-// @param handle       Socket handle
-// @param *data        the user supplied buffer to save the data to
-// @param size         the numbr of bytes to get
-//
+/**
+* Receives data from the WNC14A2A and returns it to the caller
+* @author James Flynn
+* @param  handle     The socket number to use (currently only uses 1)
+* @param  data       Pointer to users receive buffer
+* @param  size       Max Number of bytes to receive
+* @return int        Number of bytes being returned
+* @date 1-Feb-2018
+*/
 int WNC14A2AInterface::socket_recv(void *handle, void *data, unsigned size) 
 {
     WNCSOCKET *wnc = (WNCSOCKET *)handle;
@@ -861,6 +883,13 @@ int WNC14A2AInterface::socket_recv(void *handle, void *data, unsigned size)
         }
 }
 
+/**
+* The EventQueue handler which receives and processes incomming data 
+* @author James Flynn
+* @param  none. 
+* @return void
+* @date 1-Feb-2018
+*/
 void WNC14A2AInterface::handle_recv_event()
 {
     debugOutput("ENTER handle_recv_event()");
@@ -925,14 +954,14 @@ void WNC14A2AInterface::handle_recv_event()
 
 int inline WNC14A2AInterface::socket_accept(nsapi_socket_t server, nsapi_socket_t *handle, SocketAddress *address) 
 {
-    debugOutput("socket_accept() called");
+    debugOutput("ENTER/EXIT socket_accept()");
     _errors = NSAPI_ERROR_UNSUPPORTED;
     return -1;
 }
 
 int inline WNC14A2AInterface::socket_bind(void *handle, const SocketAddress &address) 
 {
-    debugOutput("socket_bind() called");
+    debugOutput("ENTER/EXIT socket_bind()");
     _errors = NSAPI_ERROR_UNSUPPORTED;
     return -1;
 }
@@ -940,7 +969,7 @@ int inline WNC14A2AInterface::socket_bind(void *handle, const SocketAddress &add
 
 int inline WNC14A2AInterface::socket_listen(void *handle, int backlog)
 {
-   debugOutput("socket_listen() called");
+   debugOutput("ENTER/EXIT socket_listen()");
     _errors = NSAPI_ERROR_UNSUPPORTED;
     return -1;
 }
@@ -955,21 +984,18 @@ int inline WNC14A2AInterface::socket_listen(void *handle, int backlog)
 //-------------------------------------------------------------------------
 //
 
-/*-------------------------------------------------------------------------
- * doDebug is just a handy way to allow a developer to set different levels
- * of debug for the WNC14A2A device.
- *
- * Input:  a Bitfield of -
- *   basic debug       = 0x01
- *   more debug        = 0x02
- *   mbed driver debug = 0x04
- *   dump buffers      = 0x08
- *   all debug         = 0x0f
- *
- * Output: none
- *
- * Returns: void
- */
+/**
+* function that allows a caller to set various levels of debug output
+* @author James Flynn
+* @param  v    a bitfield indicating output to provide
+* @note            basic AT command info= 0x01
+* @note            more AT command info = 0x02
+* @note            mbed driver info     = 0x04
+* @note            dump buffers         = 0x08
+* @note            all debug            = 0x0f
+* @return void
+* @date 1-Feb-2018
+*/
 void WNC14A2AInterface::doDebug( int v )
 {
     if( !_pwnc )
@@ -985,6 +1011,14 @@ void WNC14A2AInterface::doDebug( int v )
     debugOutput("SET debug flag to 0x%02X",v);
 }
 
+/**
+* function that dumps a user provided array.
+* @author James Flynn
+* @param  data    pointer to the data array to dump
+* @param  size    number of bytes to dump
+* @return void
+* @date 1-Feb-2018
+*/
 void WNC14A2AInterface::debugDump_arry( const uint8_t* data, unsigned int size )
 {
     char buffer[256];
@@ -1008,17 +1042,15 @@ void WNC14A2AInterface::debugDump_arry( const uint8_t* data, unsigned int size )
         }
 }
 
-/*-------------------------------------------------------------------------
- * Simple function to allow for writing debug messages.  It always 
- * checks to see if debug has been enabled or not before it
- * outputs the message.
- *
- * Input: The debug uart pointer followed by format string and vars
- *
- * Output: none
- *
- * Return: void
- */
+/**
+* function to allow for writing debug messages.  It always checks to see if debug has 
+* been enabled or not before it outputs the message.
+* @author James Flynn
+* @param  format     a string containign the output format
+* @param  ...        parameters used when printing
+* @return void
+* @date 1-Feb-2018
+*/
 void WNC14A2AInterface::debugOutput(const char *format, ...) 
 {
     char buffer[256];
