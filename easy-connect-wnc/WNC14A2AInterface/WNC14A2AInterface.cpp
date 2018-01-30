@@ -1,4 +1,19 @@
 
+/* WNC14A2A implementation of NetworkInterfaceAPI
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+ 
 #include "WNC14A2AInterface.h"
 #include <Thread.h>
 #include "mbed_events.h"
@@ -6,17 +21,15 @@
 #include <string> 
 #include <ctype.h>
 
-#define TRACE_GROUP "WNCd"
-
 /** 
  *  WNC14A2AInterface class that implements a NetworkInterface for the 
  *  WNC14A2A Cellular Data Module in the mbed OS
  */
 
 #define READ_EVERYMS                   250               //try getting data every (250) milli-second(s)
-#define WNC14A2A_READ_TIMEOUTMS        9000              //read this long total until we decide there is no data to receive in MS
+#define WNC14A2A_READ_TIMEOUTMS        2000              //read this long total until we decide there is no data to receive in MS
 #define WNC14A2A_COMMUNICATION_TIMEOUT 100               //how long (ms) to wait for a WNC14A2A connect response
-#define WNC_BUFF_SIZE                  1500              //total number of bytes WNC can handle in a single call
+#define WNC_BUFF_SIZE                  1500              //total number of bytes in a single WNC call
 #define UART_BUFF_SIZE                 4000              //size of our internal uart buffer
 
 //
@@ -24,9 +37,9 @@
 // for data availablility.  To implement a non-blocking mode, interrupts are simulated using
 // mbed OS Event Queues.  These Constants are used to manage that sequence.
 //
-#define READ_START         10
-#define READ_ACTIVE        11
-#define DATA_AVAILABLE     12
+#define READ_START                     10
+#define READ_ACTIVE                    11
+#define DATA_AVAILABLE                 12
 
 
 //
@@ -338,8 +351,7 @@ nsapi_error_t WNC14A2AInterface::gethostbyname(const char* name, SocketAddress *
         }
 
     debugOutput("EXIT gethostbyname(), IP=%s; PORT=%d", address->get_ip_address(), address->get_port());
-    _errors = ret;
-    return ret;
+    return (_errors = ret);
 }
  
 /*-------------------------------------------------------------------------
@@ -408,6 +420,7 @@ int WNC14A2AInterface::socket_close(void *handle)
         m_active_socket = wnc->socket; //just in case sending to a socket that wasn't last used
     
     if( m_recv_wnc_state != READ_START ) {
+        m_recv_events = 0;  //force a timeout
         while( m_recv_wnc_state !=  DATA_AVAILABLE ) 
             wait(1);  //someone called close while a read was happening
         }
@@ -538,87 +551,6 @@ bool WNC14A2AInterface::registered()
     debugOutput("EXIT registered()");
     return (_errors==NSAPI_ERROR_OK);
 }
-
-/*-------------------------------------------------------------------------
- * doDebug is just a handy way to allow a developer to set different levels
- * of debug for the WNC14A2A device.
- *
- * Input:  a Bitfield of -
- *   basic debug       = 0x01
- *   more debug        = 0x02
- *   mbed driver debug = 0x04
- *   dump buffers      = 0x08
- *   all debug         = 0x0f
- *
- * Output: none
- *
- * Returns: void
- */
-void WNC14A2AInterface::doDebug( int v )
-{
-    if( !_pwnc )
-        _errors = NSAPI_ERROR_DEVICE_ERROR;
-    else {
-        _pwnc_mutex.lock();
-        _pwnc->enableDebug( (v&1), (v&2) );
-        _pwnc_mutex.unlock();
-        }
-
-    m_debug= (v & 0x0c);
-
-    debugOutput("SET debug flag to 0x%02X",v);
-}
-
-void WNC14A2AInterface::debugDump_arry( const uint8_t* data, unsigned int size )
-{
-    char buffer[256];
-    unsigned int i, k;
-
-    if( _debugUart != NULL && (m_debug & 0x08) ) {
-        for (i=0; i<size; i+=16) {
-            sprintf(buffer,"[WNC Driver]:0x%04X: ",i);
-            _debugUart->puts(buffer);
-            for (k=0; k<16; k++) {
-                sprintf(buffer, "%02X ", data[i+k]);
-                _debugUart->puts(buffer);
-                }
-            _debugUart->puts(" -- ");
-            for (k=0; k<16; k++) {
-                sprintf(buffer, "%2c", isprint(data[i+k])? data[i+k]:'.');
-                _debugUart->puts(buffer);
-                }
-            _debugUart->puts("\n\r");
-            }
-        }
-}
-
-/*-------------------------------------------------------------------------
- * Simple function to allow for writing debug messages.  It always 
- * checks to see if debug has been enabled or not before it
- * outputs the message.
- *
- * Input: The debug uart pointer followed by format string and vars
- *
- * Output: none
- *
- * Return: void
- */
-void WNC14A2AInterface::debugOutput(const char *format, ...) 
-{
-    char buffer[256];
-
-    sprintf(buffer,"[WNC Driver]: ");
-    if( _debugUart != NULL && (m_debug & 0x0c) ) {
-        va_list args;
-        va_start (args, format);
-        _debugUart->puts(buffer);
-        vsnprintf(buffer, sizeof(buffer), format, args);
-        _debugUart->puts(buffer);
-        _debugUart->putc('\n');
-        va_end (args);
-        }
-}
-
 ////////////////////////////////////////////////////////////////////
 //  SMS methods
 ///////////////////////////////////////////////////////////////////
@@ -825,6 +757,7 @@ void WNC14A2AInterface::socket_attach(void *handle, void (*callback)(void *), vo
 
 //-------------------------------------------------------------------------
 //sends data to a UDP socket
+//
 int WNC14A2AInterface::socket_sendto(void *handle, const SocketAddress &address, const void *data, unsigned size)
 {
     WNCSOCKET *wnc = (WNCSOCKET *)handle;
@@ -842,6 +775,7 @@ int WNC14A2AInterface::socket_sendto(void *handle, const SocketAddress &address,
     return socket_send(wnc, data, size);
 }
 
+//-------------------------------------------------------------------------
 //receives from a UDP socket
 // *address is the addres that this data is from
 // *buffer is the data that was sent
@@ -866,6 +800,12 @@ int WNC14A2AInterface::socket_recvfrom(void *handle, SocketAddress *address, voi
 }
 
 
+//-------------------------------------------------------------------------
+//receives data from a socket
+// @param handle       Socket handle
+// @param *data        the user supplied buffer to save the data to
+// @param size         the numbr of bytes to get
+//
 int WNC14A2AInterface::socket_recv(void *handle, void *data, unsigned size) 
 {
     WNCSOCKET *wnc = (WNCSOCKET *)handle;
@@ -893,15 +833,14 @@ int WNC14A2AInterface::socket_recv(void *handle, void *data, unsigned size)
             m_recv_return_cnt=0;
 
             if( m_recv_req_size > WNC_BUFF_SIZE) {
-                m_recv_events =  (uint32_t)size/WNC_BUFF_SIZE;
-                m_recv_req_size = WNC_BUFF_SIZE;
+                m_recv_events  =  ((uint32_t)size/WNC_BUFF_SIZE);
+                m_recv_req_size= WNC_BUFF_SIZE;
                 }
             m_recv_callback = wnc->_callback;
             m_recv_cb_data  = wnc->_cb_data;
             m_recv_wnc_state = READ_ACTIVE;
             recv_queue.call(mbed::Callback<void()>((WNC14A2AInterface*)this,&WNC14A2AInterface::handle_recv_event));
             _pwnc_mutex.unlock();
-            debugOutput("EXIT socket_recv(), NSAPI_ERROR_WOULD_BLOCK (initial)");
             return NSAPI_ERROR_WOULD_BLOCK;
 
         case DATA_AVAILABLE:
@@ -913,7 +852,6 @@ int WNC14A2AInterface::socket_recv(void *handle, void *data, unsigned size)
 
         case READ_ACTIVE:
             _pwnc_mutex.unlock();
-            debugOutput("EXIT socket_recv(), NSAPI_ERROR_WOULD_BLOCK (read)");
             return NSAPI_ERROR_WOULD_BLOCK;
 
         default:
@@ -945,8 +883,9 @@ void WNC14A2AInterface::handle_recv_event()
         m_recv_timer = 0;  //restart the timer
         }
     else if( ++m_recv_timer > (WNC14A2A_READ_TIMEOUTMS/READ_EVERYMS) ) {
-        //didn't get any data and we timed out waiting
-        debugOutput("EXIT handle_recv_event(), TIME-OUT!");
+        //didn't get all requested data and we timed out waiting
+        debugOutput("EXIT handle_recv_event(), TIME-OUT! Recived %d bytes, original request=%d",m_recv_total_cnt, m_recv_orig_size);
+        m_recv_return_cnt = m_recv_total_cnt;
         m_recv_wnc_state = DATA_AVAILABLE;
         if( m_recv_callback != NULL ) 
             m_recv_callback( m_recv_cb_data );
@@ -957,11 +896,11 @@ void WNC14A2AInterface::handle_recv_event()
         }
 
     if( m_recv_events > 0 ) {
-        debugOutput("EXIT handle_recv_event(), sechedule new event for more data. m_recv_events=%d, cnt=%d, m_recv_timer=%d.",m_recv_events,cnt,m_recv_timer);
+        debugOutput("EXIT handle_recv_event(), sechedule new event for more data.");
         recv_queue.call_in(READ_EVERYMS,mbed::Callback<void()>((WNC14A2AInterface*)this,&WNC14A2AInterface::handle_recv_event));
         }
     else {
-        debugOutput("EXIT handle_recv_event(), %d bytes availabale", m_recv_total_cnt);
+        debugOutput("EXIT handle_recv_event(), data available.");
         m_recv_return_cnt = m_recv_total_cnt;
         m_recv_wnc_state = DATA_AVAILABLE;
         if( m_recv_callback != NULL ) 
@@ -1004,5 +943,95 @@ int inline WNC14A2AInterface::socket_listen(void *handle, int backlog)
    debugOutput("socket_listen() called");
     _errors = NSAPI_ERROR_UNSUPPORTED;
     return -1;
+}
+
+//
+//-------------------------------------------------------------------------
+//-------------------------------------------------------------------------
+//-------------------------------------------------------------------------
+//      Debug Helpers
+//-------------------------------------------------------------------------
+//-------------------------------------------------------------------------
+//-------------------------------------------------------------------------
+//
+
+/*-------------------------------------------------------------------------
+ * doDebug is just a handy way to allow a developer to set different levels
+ * of debug for the WNC14A2A device.
+ *
+ * Input:  a Bitfield of -
+ *   basic debug       = 0x01
+ *   more debug        = 0x02
+ *   mbed driver debug = 0x04
+ *   dump buffers      = 0x08
+ *   all debug         = 0x0f
+ *
+ * Output: none
+ *
+ * Returns: void
+ */
+void WNC14A2AInterface::doDebug( int v )
+{
+    if( !_pwnc )
+        _errors = NSAPI_ERROR_DEVICE_ERROR;
+    else {
+        _pwnc_mutex.lock();
+        _pwnc->enableDebug( (v&1), (v&2) );
+        _pwnc_mutex.unlock();
+        }
+
+    m_debug= v;
+
+    debugOutput("SET debug flag to 0x%02X",v);
+}
+
+void WNC14A2AInterface::debugDump_arry( const uint8_t* data, unsigned int size )
+{
+    char buffer[256];
+    unsigned int i, k;
+
+    if( _debugUart != NULL && (m_debug & 0x08) ) {
+        for (i=0; i<size; i+=16) {
+            sprintf(buffer,"[WNC Driver]:0x%04X: ",i);
+            _debugUart->puts(buffer);
+            for (k=0; k<16; k++) {
+                sprintf(buffer, "%02X ", data[i+k]);
+                _debugUart->puts(buffer);
+                }
+            _debugUart->puts(" -- ");
+            for (k=0; k<16; k++) {
+                sprintf(buffer, "%2c", isprint(data[i+k])? data[i+k]:'.');
+                _debugUart->puts(buffer);
+                }
+            _debugUart->puts("\n\r");
+            }
+        }
+}
+
+/*-------------------------------------------------------------------------
+ * Simple function to allow for writing debug messages.  It always 
+ * checks to see if debug has been enabled or not before it
+ * outputs the message.
+ *
+ * Input: The debug uart pointer followed by format string and vars
+ *
+ * Output: none
+ *
+ * Return: void
+ */
+void WNC14A2AInterface::debugOutput(const char *format, ...) 
+{
+    char buffer[256];
+
+    sprintf(buffer,"[WNC Driver]: ");
+    if( _debugUart != NULL && (m_debug & 0x0c) ) {
+        va_list args;
+        va_start (args, format);
+        _debugUart->puts(buffer);
+        vsnprintf(buffer, sizeof(buffer), format, args);
+        _debugUart->puts(buffer);
+        _debugUart->putc('\n');
+        va_end (args);
+        }
 }
 

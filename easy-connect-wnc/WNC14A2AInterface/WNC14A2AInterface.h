@@ -1,5 +1,4 @@
 /* WNC14A2A implementation of NetworkInterfaceAPI
- * Copyright (c) 2015 ARM Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -335,9 +334,10 @@ private:
     void debugOutput(const char *format, ...);
     void debugDump_arry( const uint8_t* data, unsigned int size );
 
-//jmf temp
-    int      m_recv_wnc_state;
+    // these variables are all related to the Receive Interrupt simulation
+    // that is implemented to allow non-blocking receiption
     uint8_t *m_recv_dptr;
+    int      m_recv_wnc_state;
     int      m_recv_events;
     int      m_recv_socket;
     int      m_recv_timer;
