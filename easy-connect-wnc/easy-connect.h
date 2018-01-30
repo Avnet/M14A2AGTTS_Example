@@ -152,7 +152,7 @@ NetworkInterface* easy_connect(bool log_messages = false) {
         printf("[EasyConnect] Using WNC14A2A\n");
     }
 #   if MBED_CONF_APP_WNC_DEBUG == true
-        printf("[EasyConnect] with debug output set to %d\n",MBED_CONF_APP_WNC_DEBUG_SETTING);
+        printf("[EasyConnect] with debug output set to 0x%02X\n",MBED_CONF_APP_WNC_DEBUG_SETTING);
         wnc = new WNC14A2AInterface(&dbgout);
         wnc->doDebug(MBED_CONF_APP_WNC_DEBUG_SETTING);
 #   else
