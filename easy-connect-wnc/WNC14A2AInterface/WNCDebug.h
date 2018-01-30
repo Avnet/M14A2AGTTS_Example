@@ -33,34 +33,41 @@ public:
             va_list args;
             va_start (args, fmt);
             vsnprintf(buffer, sizeof(buffer), fmt, args);
+            prt.lock();
             if( m_stdiofp )
                 ret=fputs(buffer,m_stdiofp);
             else
                 ret=m_puart->puts(buffer);
+            prt.unlock();
             va_end (args);
             return ret;
             }
 
     int putc( int c ) {
             int ret=0;
+            prt.lock();
             if( m_stdiofp )
                 ret=fputc(c, m_stdiofp);
             else
                 ret=m_puart->putc(c);
+            prt.unlock();
             return ret;
             }
 
     int puts( const char * str ) {
             int ret=0;
+            prt.lock();
             if( m_stdiofp )
                 ret=fputs(str,m_stdiofp);
             else
                 ret=m_puart->puts(str);
+            prt.unlock();
             return ret;
             }
 
 private:
     std::FILE *m_stdiofp;
     BufferedSerial *m_puart;
+    Mutex prt;
 };
 #endif
