@@ -308,8 +308,8 @@ private:
     // WncController Class for managing the 14A2a
     friend class WncControllerK64F;  
 
-    bool m_wncpoweredup;                    //track if WNC has been power-up
-    bool m_debug;
+    bool     m_wncpoweredup;                //track if WNC has been power-up
+    unsigned m_debug;
 
     WncIpStats myNetStats;                  //maintaint the network statistics
     WncControllerK64F_fk::WncControllerK64F *_pwnc; //pointer to the WncController instance
@@ -321,6 +321,7 @@ private:
 
     bool m_smsmoning;                       // Track if the SMS monitoring thread is running
     EventQueue sms_queue;                   // Queue used to schedule for SMS checks
+    EventQueue recv_queue;                  // Queue used to schedule for receiving data
     Semaphore sms_rx_sem;                   // Semaphore to signal sms_event_thread to check for incoming text 
     void (*_sms_cb)(IOTSMS *);              // Callback when text message is received. User must define this as 
                                             // a static function because I'm not handling an object offset
@@ -328,10 +329,24 @@ private:
     struct WncController::WncSmsList m_smsmsgs;            //use the WncSmsList structure to hold messages
 
     void handle_sms_event();                // Handle incoming text data
+    void handle_recv_event();               // Handle socket receive data
 
     char _mac_address[NSAPI_MAC_SIZE];      // local Mac
     void debugOutput(const char *format, ...);
     void debugDump_arry( const uint8_t* data, unsigned int size );
+
+//jmf temp
+    int      m_recv_wnc_state;
+    uint8_t *m_recv_dptr;
+    int      m_recv_events;
+    int      m_recv_socket;
+    int      m_recv_timer;
+    unsigned m_recv_orig_size;
+    uint32_t m_recv_req_size, m_recv_total_cnt;
+    uint32_t m_recv_return_cnt;
+    void (*m_recv_callback)(void*);
+    void  *m_recv_cb_data;
+
 };
 
 #endif
