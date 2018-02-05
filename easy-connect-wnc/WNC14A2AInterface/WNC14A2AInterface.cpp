@@ -1,8 +1,9 @@
+/**
+* copyright (c) 2017-2018, James Flynn
+* SPDX-License-Identifier: Apache-2.0
+*/
 
 /* 
- * copyright (c) 2017-2018, James Flynn
- * SPDX-License-Identifier: Apache-2.0
- *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -34,25 +35,33 @@
 #include <string> 
 #include <ctype.h>
 
-/** 
- *  WNC14A2AInterface class that implements a NetworkInterface for the 
- *  WNC14A2A Cellular Data Module in the mbed OS
- */
-
-#define READ_EVERYMS                   250               //try getting data every (250) milli-second(s)
 #define WNC14A2A_READ_TIMEOUTMS        2000              //read this long total until we decide there is no data to receive in MS
 #define WNC14A2A_COMMUNICATION_TIMEOUT 100               //how long (ms) to wait for a WNC14A2A connect response
 #define WNC_BUFF_SIZE                  1500              //total number of bytes in a single WNC call
 #define UART_BUFF_SIZE                 4000              //size of our internal uart buffer
+#define ISR_FREQ                       250               //frequency in ms to run the isr handler
 
 //
 // The WNC device does not generate interrutps on received data, so the module must be polled 
 // for data availablility.  To implement a non-blocking mode, interrupts are simulated using
 // mbed OS Event Queues.  These Constants are used to manage that sequence.
 //
-#define READ_START                     10
-#define READ_ACTIVE                    11
-#define DATA_AVAILABLE                 12
+#define READ_INIT                      10
+#define READ_START                     11
+#define READ_ACTIVE                    12
+#define DATA_AVAILABLE                 13
+#define TX_IDLE                        20
+#define TX_STARTING                    21
+#define TX_ACTIVE                      22
+#define TX_COMPLETE                    23
+
+#if MBED_CONF_APP_WNC_DEBUG == true
+#define debugOutput(...)      WNC14A2AInterface::_dbOut(__VA_ARGS__)
+#define debugDump_arry(...)   WNC14A2AInterface::_dbDump_arry(__VA_ARGS__)
+#else
+#define debugOutput(...)      {/* __VA_ARGS__ */}
+#define debugDump_arry(...)   {/* __VA_ARGS__ */}
+#endif
 
 
 //
@@ -65,11 +74,9 @@ DigitalOut  mdm_reset(PTC12);                   // active high
 DigitalOut  shield_3v3_1v8_sig_trans_ena(PTC4); // 0 = disabled (all signals high impedence, 1 = translation active
 DigitalOut  mdm_uart1_cts(PTD0);                // WNC doesn't utilize RTS/CTS but the pin is connected
 
-// Define pin associations for the controller class to use be careful to 
-// keep the order of the pins in the initialization list.
-
 using namespace WncControllerK64F_fk;            // namespace for the AT controller class use
 
+//! associations for the controller class to use. Order of pins is critical.
 WncGpioPinListK64F wncPinList = { 
     &mdm_uart2_rx_boot_mode_sel,
     &mdm_power_on,
@@ -79,25 +86,21 @@ WncGpioPinListK64F wncPinList = {
     &mdm_uart1_cts
 };
 
-Thread smsThread, recvThread;                     //SMS thread is for receiving SMS messages, recv is for simulated rx-interrupt
-static Mutex _pwnc_mutex;                         //because AT class is not re-entrant
+Thread smsThread, isrThread;                          //SMS thread for receiving SMS, recv is for simulated rx-interrupt
+//static Mutex _pwnc_mutex;                           //because WNC class is not re-entrant
+Semaphore _pwncSem(3);                                //because WNC class is not re-entrant
 
-static WNCSOCKET _sockets[WNC14A2A_SOCKET_COUNT];   //WNC supports 8 open sockets but driver doesn't support that at this time
-BufferedSerial mdmUart(PTD3,PTD2,UART_BUFF_SIZE,1); //UART for WNC Module
+static WNCSOCKET _sockets[WNC14A2A_SOCKET_COUNT];     //WNC supports 8 open sockets but driver only supports 1 currently
+BufferedSerial   mdmUart(PTD3,PTD2,UART_BUFF_SIZE,1); //UART for WNC Module
 
-//-------------------------------------------------------------------------
-//
-// Class constructor.  May be invoked with or without the APN and/or pointer
-// to a debug output.  After the constructor has completed, the user can 
-// check _errors to determine if any errors occured during instanciation.
-// _errors = 0 when no errors occured
-//           1 when power-on error occured
-//           2 when settng the APN error occured
-//           4 when unable to get the network configuration
-//           8 when allocating a new WncControllerK64F object failed
-//          NSAPI_ERROR_UNSUPPORTED when attempting to create a second object
-//
-
+/*   Constructor
+*
+*  @brief    May be invoked with or without the debug pointer.
+*  @note     After the constructor has completed, call check 
+*  _errors to determine if any errors occured. Possible values:
+*           NSAPI_ERROR_UNSUPPORTED 
+*           NSAPI_ERROR_DEVICE_ERROR
+*/
 WNC14A2AInterface::WNC14A2AInterface(WNCDebug *dbg) : 
  m_wncpoweredup(0),
  _pwnc(NULL),
@@ -131,37 +134,15 @@ WNC14A2AInterface::WNC14A2AInterface(WNCDebug *dbg) :
         _errors = NSAPI_ERROR_DEVICE_ERROR;
         }
 
-    recvThread.start(callback(&recv_queue,&EventQueue::dispatch_forever));
+    isrThread.start(callback(&isr_queue,&EventQueue::dispatch_forever));
 }
 
-/*-------------------------------------------------------------------------
- */
-
-/**
-* Standard destructor... free up allocated memory
-* @author James Flynn
-* @param  none
-* @date 1-Feb-2018
-*/
+//! Standard destructor
 WNC14A2AInterface::~WNC14A2AInterface()
 {
     delete _pwnc;  //free the existing WncControllerK64F object
 }
 
-
-/*-------------------------------------------------------------------------
- * This call powers up the WNC module and connects to the user specified APN.  If no APN is provided
- * a default one of 'm2m.com.attz' will be used (the NA APN)
- *
- * Input: *apn is the APN string to use
- *        *username - NOT CURRENTLY USED
- *        *password - NOT CURRENTLY USED
- *
- * Output: none
-ne
- *
- * Return: nsapi_error_t
- */
 
 nsapi_error_t WNC14A2AInterface::connect()   //can be called with no arguments or with arguments
 {
@@ -180,62 +161,37 @@ nsapi_error_t WNC14A2AInterface::connect(const char *apn, const char *username, 
 
     if (!m_wncpoweredup) {
         debugOutput("call powerWncOn(%s,40)",apn);
-        _pwnc_mutex.lock();
+        _pwncSem.wait();
         m_wncpoweredup=_pwnc->powerWncOn(apn,40);
         _errors = m_wncpoweredup? 1:0;
         }
     else {          //powerWncOn already called, set a new APN
-        debugOutput("Already powered on, APN=%s",apn);
-        _pwnc_mutex.lock();
+        debugOutput("set APN=%s",apn);
+        _pwncSem.wait();
         _errors = _pwnc->setApnName(apn)? 1:0;
         }
 
     _errors |= _pwnc->getWncNetworkingStats(&myNetStats)? 2:0;
-    _pwnc_mutex.unlock();
+    _pwncSem.release();
 
     debugOutput("EXIT connect (%02X)",_errors);
     return (!_errors)? NSAPI_ERROR_NO_CONNECTION : NSAPI_ERROR_OK;
 }
 
-/*--------------------------------------------------------------------------
- * This function calls the WNC to retrieve the WNC connected IP 
- * address once connected to the APN.
- *
- * Inputs: NONE.
- *
- * Output: none.
- *
- * Return: pointer to the IP string or NULL 
- */
 const char *WNC14A2AInterface::get_ip_address()
 {
     const char *ptr=NULL; 
 
-    _pwnc_mutex.lock();
+    _pwncSem.wait();
     if ( _pwnc->getWncNetworkingStats(&myNetStats) ) {
         CHK_WNCFE(( _pwnc->getWncStatus() == FATAL_FLAG ), null);
         ptr = &myNetStats.ip[0];
     }
-    _pwnc_mutex.unlock();
+    _pwncSem.release();
     _errors=NSAPI_ERROR_NO_CONNECTION;
     return ptr;
 }
 
-/* -------------------------------------------------------------------------
- * Open a socket for the WNC.  This doesn't actually open the socket within
- * the WNC, it only allocates a socket device and saves driver required info
- * when socket is used. m_active_socket is updated so this socket will be used
- * for subsequent interactions.
- *
- * Input: 
- *  - a pointer to a handle pointer.  
- *  - The type of socket this will be, either NSAPI_UDP or NSAP_TCP
- *
- * Output: *handle is updated
- *
- * Return:
- *  - socket being used if successful, -1 on failure
- */
 int WNC14A2AInterface::socket_open(void **handle, nsapi_protocol_t proto) 
 {
     int i;
@@ -262,26 +218,16 @@ int WNC14A2AInterface::socket_open(void **handle, nsapi_protocol_t proto)
     _sockets[i]._cb_data = NULL;         
     *handle = &_sockets[i];
 
-    debugOutput("EXIT socket_open; Socket=%d, OPEN=%s, protocol =%s",
-    i, _sockets[i].opened?"YES":"NO", (_sockets[i].proto==NSAPI_UDP)?"UDP":"TCP");
     m_recv_wnc_state = READ_START;
+    m_tx_wnc_state = TX_IDLE;
+
+    debugOutput("EXIT socket_open; Socket=%d, OPEN=%s, protocol =%s",
+                i, _sockets[i].opened?"YES":"NO", (_sockets[i].proto==NSAPI_UDP)?"UDP":"TCP");
     
     _errors = NSAPI_ERROR_OK;
     return i;
 }
 
-/*-------------------------------------------------------------------------
- * Connect a socket to a IP/PORT.  Before you can connect a socket, you must have opened
- * it.
- *
- * Input: handle - pointer to the socket to use
- *        address- the IP/Port pair that will be used
- *
- * Output: none
- *
- * return: 0 or greater on success (value is the socket ID)
- *        -1 on failure
- */
 int WNC14A2AInterface::socket_connect(void *handle, const SocketAddress &address) 
 {
     WNCSOCKET *wnc = (WNCSOCKET *)handle;   
@@ -301,7 +247,7 @@ int WNC14A2AInterface::socket_connect(void *handle, const SocketAddress &address
     //try connecting to URL if possible, if no url, try IP address
     //
 
-    _pwnc_mutex.lock();
+    _pwncSem.wait();
     if( wnc->url.empty() ) {
         if( !_pwnc->openSocketIpAddr(m_active_socket, address.get_ip_address(), address.get_port(), 
                                        (wnc->proto==NSAPI_UDP)?0:1, WNC14A2A_COMMUNICATION_TIMEOUT) ) 
@@ -311,28 +257,20 @@ int WNC14A2AInterface::socket_connect(void *handle, const SocketAddress &address
         if( !_pwnc->openSocketUrl(m_active_socket, wnc->url.c_str(), wnc->addr.get_port(), (wnc->proto==NSAPI_UDP)?0:1) ) 
             rval = -1;
         }
-    _pwnc_mutex.unlock();
+    _pwncSem.release();
     if( !rval ) {
         wnc->_wnc_opened = true;
-        debugOutput("SOCKET %d; IP=%s; PORT=%d; URL=%s;",
-             m_active_socket, wnc->addr.get_ip_address(), wnc->addr.get_port(), wnc->url.c_str());
+        debugOutput("EXIT socket_connect()");
         }
+
+    m_recv_wnc_state = READ_START;
+    m_tx_wnc_state = TX_IDLE;
+
+    if( wnc->_callback != NULL ) 
+        wnc->_callback( wnc->_cb_data );
 
     return rval;
 }
-
-/*-------------------------------------------------------------------------
- * Perform a URL name resolve, update the IP/Port pair, and nsapi_version. nsapi_version
- * could be either NSAPI_IPv4 or NSAPI_IPv6 but this functional is hard coded ti NSAPI_IPv4
- * for now. The currently active socket is used for the resolution.  
- *
- * Input: name - the URL to resolve
- *
- * Output: address - the IP/PORT pair this URL resolves to
- *         version - always assumed to be NSAPI_IPv4  currently
- *
- * Return: nsapi_error_t
- */
 
 nsapi_error_t WNC14A2AInterface::gethostbyname(const char* name, SocketAddress *address, nsapi_version_t version)
 {
@@ -350,14 +288,14 @@ nsapi_error_t WNC14A2AInterface::gethostbyname(const char* name, SocketAddress *
         t_socket = m_active_socket; //if so, do nothing with the active socket index
 
     //Execute DNS query.  
-    _pwnc_mutex.lock();
+    _pwncSem.wait();
     if( !_pwnc->resolveUrl(t_socket, name) )  
         ret = _errors = NSAPI_ERROR_DEVICE_ERROR;
 
     //Get IP address that the URL was resolved to
     if( !_pwnc->getIpAddr(t_socket, ipAddrStr) )
         ret = _errors = NSAPI_ERROR_DEVICE_ERROR;
-    _pwnc_mutex.unlock();
+    _pwncSem.release();
 
     if( ret != NSAPI_ERROR_OK )
         return ret;
@@ -369,61 +307,11 @@ nsapi_error_t WNC14A2AInterface::gethostbyname(const char* name, SocketAddress *
         _sockets[m_active_socket].addr.set_ip_address(ipAddrStr);
         }
 
-    debugOutput("EXIT gethostbyname(), IP=%s; PORT=%d", address->get_ip_address(), address->get_port());
+    debugOutput("EXIT gethostbyname()");
     return (_errors = ret);
 }
  
-/*-------------------------------------------------------------------------
- * using the specified socket, send the data.
- *
- * Input: handle of the socket to use
- *        pointer to the data to send
- *        amount of data being sent
- *
- * Output: none
- *
- * Return: number of bytes that was sent
- */
-int WNC14A2AInterface::socket_send(void *handle, const void *data, unsigned size) 
-{
-    WNCSOCKET *wnc = (WNCSOCKET *)handle;
-    int r = -1;
-    debugOutput("ENTER socket_send(); writing %d bytes",size);
 
-    if (!_pwnc || m_active_socket == -1) {
-        _errors = NSAPI_ERROR_NO_SOCKET;
-        return 0;
-        }
-    else
-        m_active_socket = wnc->socket; //just in case sending to a socket that wasn't last used
-
-    debugDump_arry((const uint8_t*)data,size);
-
-    _pwnc_mutex.lock();
-    if( _pwnc->write(m_active_socket, (const uint8_t*)data, size) )  {
-       r = size;
-       debugOutput("EXIT socket_send(), %d bytes sent.",r);
-       }
-    else
-       debugOutput("EXIT socket_send(), socket %d failed!\n",m_active_socket);
-    _pwnc_mutex.unlock();
-
-    if( wnc->_callback != NULL ) 
-        wnc->_callback( wnc->_cb_data );
-
-    return r;
-}  
-
-
-/*-------------------------------------------------------------------------
- * Close a socket 
- *
- * Input: the handle to the socket to close
- *
- * Output: none
- *
- * Return: -1 on error, otherwise 0
- */
 int WNC14A2AInterface::socket_close(void *handle)
 {
     WNCSOCKET *wnc = (WNCSOCKET*)handle;
@@ -438,18 +326,19 @@ int WNC14A2AInterface::socket_close(void *handle)
     else
         m_active_socket = wnc->socket; //just in case sending to a socket that wasn't last used
     
-    if( m_recv_wnc_state != READ_START ) {
+    m_tx_wnc_state = TX_IDLE;               //reset TX state
+    if( m_recv_wnc_state != READ_START ) {  //reset RX state
         m_recv_events = 0;  //force a timeout
         while( m_recv_wnc_state !=  DATA_AVAILABLE ) 
             wait(1);  //someone called close while a read was happening
         }
 
-    _pwnc_mutex.lock();
+    _pwncSem.wait();
     if( !_pwnc->closeSocket(m_active_socket) ) {
         _errors = NSAPI_ERROR_DEVICE_ERROR;
         rval = -1;
         }
-    _pwnc_mutex.unlock();
+    _pwncSem.release();
 
     if( !rval ) {
         wnc->opened   = false;       //no longer in use
@@ -464,25 +353,14 @@ int WNC14A2AInterface::socket_close(void *handle)
     return rval;
 }
 
-/*-------------------------------------------------------------------------
- * return the MAC for this device.  Because there is no MAC Ethernet 
- * address to return, this function returns a bogus MAC address created 
- * from the ICCD on the SIM that is being used.
- *
- * Input: none
- *
- * Output: none
- *
- * Return: MAC string containing "NN:NN:NN:NN:NN:NN" or NULL
- */
 const char *WNC14A2AInterface::get_mac_address()
 {
     string mac, str;
     debugOutput("ENTER get_mac_address()");
 
-    _pwnc_mutex.lock();
+    _pwncSem.wait();
     if( _pwnc->getICCID(&str) ) {
-        _pwnc_mutex.unlock();
+        _pwncSem.release();
         CHK_WNCFE((_pwnc->getWncStatus()==FATAL_FLAG), null);
         mac = str.substr(3,20);
         mac[2]=mac[5]=mac[8]=mac[11]=mac[14]=':';
@@ -491,39 +369,21 @@ const char *WNC14A2AInterface::get_mac_address()
         return _mac_address;
     }
     debugOutput("EXIT get_mac_address() - NULL");
-    _pwnc_mutex.unlock();
+    _pwncSem.release();
     return NULL;
 }
 
-/*-------------------------------------------------------------------------
- * return a pointer to the current WNC14A2AInterface
- */
 NetworkStack *WNC14A2AInterface::get_stack() {
     debugOutput("ENTER/EXIT get_stack()");
     return this;
 }
 
-/*-------------------------------------------------------------------------
- * Disconnnect from the 14A2A, we cant do that so just return 
- */
 nsapi_error_t WNC14A2AInterface::disconnect() 
 {
     debugOutput("ENTER/EXIT disconnect()");
     return NSAPI_ERROR_OK;
 }
 
-/*-------------------------------------------------------------------------
- * allow the user to change the APN. The API takes username and password
- * but they are not used.
- *
- * Input: apn string
- *        username - not used
- *        password - not used
- *
- * Output: none
- *
- * Return: nsapi_error_t 
- */
 nsapi_error_t WNC14A2AInterface::set_credentials(const char *apn, const char *username, const char *password) 
 {
 
@@ -535,23 +395,14 @@ nsapi_error_t WNC14A2AInterface::set_credentials(const char *apn, const char *us
     if( !apn )
         return (_errors=NSAPI_ERROR_PARAMETER);
 
-    _pwnc_mutex.lock();
+    _pwncSem.wait();
     if( !_pwnc->setApnName(apn) )
         _errors=NSAPI_ERROR_DEVICE_ERROR;
-    _pwnc_mutex.unlock();
+    _pwncSem.release();
     debugOutput("EXIT set_credentials()");
     return _errors;
 }
 
-/*-------------------------------------------------------------------------
- * check to see if we are currently regisered with the network.
- *
- * Input: none
- *
- * Output: none
- *
- * Return: ture if we are registerd, false if not or an error occured
- */
 bool WNC14A2AInterface::registered()
 {
     debugOutput("ENTER registered()");
@@ -562,26 +413,15 @@ bool WNC14A2AInterface::registered()
         return false;
         }
 
-    _pwnc_mutex.lock();
+    _pwncSem.wait();
     if ( _pwnc->getWncStatus() != WNC_GOOD )
         _errors=NSAPI_ERROR_NO_CONNECTION;
-    _pwnc_mutex.unlock();
+    _pwncSem.release();
 
     debugOutput("EXIT registered()");
     return (_errors==NSAPI_ERROR_OK);
 }
-////////////////////////////////////////////////////////////////////
-//  SMS methods
-///////////////////////////////////////////////////////////////////
 
-/*-------------------------------------------------------------------------
- * IOTSMS message don't use a phone number, they use the device ICCID.  This 
- * function returns the ICCID based number that is used for this device.
- *
- * Input: none
- * Output: none
- * Return: string containing the IOTSMS number to use
- */
 char* WNC14A2AInterface::getSMSnbr( void ) 
 {
     char * ret=NULL;
@@ -605,44 +445,19 @@ char* WNC14A2AInterface::getSMSnbr( void )
     return ret;
 }
 
-
-/*-------------------------------------------------------------------------
- * Normally the user attaches his call-back function when performing
- * the listen call which enables the SMS system, but this function
- * allows them to update the callback if desired.
- *
- * input: pointer to the function to call
- * output: none
- * return: none
- */
 void WNC14A2AInterface::sms_attach(void (*callback)(IOTSMS *))
 {
     debugOutput("ENTER/EXIT sms_attach()");
     _sms_cb = callback;
 }
 
-/*-------------------------------------------------------------------------
- * Call this to start the SMS system.  Delete any messages currently in 
- * storage so we are notified of new incomming messages
- */
 void WNC14A2AInterface::sms_start(void)
 {
-    _pwnc_mutex.lock();                     
+    _pwncSem.wait();                     
     _pwnc->deleteSMSTextFromMem('*');       
-    _pwnc_mutex.unlock();
+    _pwncSem.release();
 }
 
-/*-------------------------------------------------------------------------
- * Initialize the IoT SMS system.  Initializing it allows the user to set a 
- * polling period to check for SMS messages, and a SMS is recevied, then 
- * a user provided function is called.  
- *
- * Input: polling period in seconds. If not specified 30 seconds is used.
- *        pointer to a users calllback function
- * Output: none
- *
- * Returns: void
- */
 void WNC14A2AInterface::sms_listen(uint16_t pp)
 {
     debugOutput("ENTER sms_listen(%d)",pp);
@@ -669,13 +484,6 @@ void WNC14A2AInterface::sms_listen(uint16_t pp)
     debugOutput("EXIT sms_listen()");
 }
 
-/*-------------------------------------------------------------------------
- * process to check SMS messages that is called at the user specified period
- * 
- * input: none
- * output:none
- * return:void
- */
 void WNC14A2AInterface::handle_sms_event()
 {
     int msgs_available;
@@ -683,9 +491,9 @@ void WNC14A2AInterface::handle_sms_event()
 
     if ( _sms_cb && m_smsmoning ) {
         CHK_WNCFE((_pwnc->getWncStatus()==FATAL_FLAG), fail);
-        _pwnc_mutex.lock();
+        _pwncSem.wait();
         msgs_available = _pwnc->readUnreadSMSText(&m_smsmsgs, true);
-        _pwnc_mutex.unlock();
+        _pwncSem.release();
         if( msgs_available ) {
             debugOutput("Have %d unread texts present",m_smsmsgs.msgCount);
             for( int i=0; i< m_smsmsgs.msgCount; i++ ) {
@@ -701,14 +509,6 @@ void WNC14A2AInterface::handle_sms_event()
 }
 
 
-/*-------------------------------------------------------------------------
- * Check for any SMS messages that are present. If there are, then  
- * fetch them and pass to the users call-back function for processing
- *
- * input: pointer to a IOTSMS message buffer array (may be more than 1 msg)
- * output:message buffer pointer is updated
- * return: the number of messages being returned
- */
 int WNC14A2AInterface::getSMS(IOTSMS **pmsg) 
 {
     int msgs_available;
@@ -716,9 +516,9 @@ int WNC14A2AInterface::getSMS(IOTSMS **pmsg)
     debugOutput("ENTER getSMS()");
     CHK_WNCFE((_pwnc->getWncStatus()==FATAL_FLAG), fail);
 
-    _pwnc_mutex.lock();
+    _pwncSem.wait();
     msgs_available = _pwnc->readUnreadSMSText(&m_smsmsgs, true);
-    _pwnc_mutex.unlock();
+    _pwncSem.release();
 
     if( msgs_available ) {
         debugOutput("Have %d unread texts present",m_smsmsgs.msgCount);
@@ -736,35 +536,19 @@ int WNC14A2AInterface::getSMS(IOTSMS **pmsg)
 }
 
 
-/*-------------------------------------------------------------------------
- * send a message to the specified user number. 
- *
- * input: string containing users number
- *        string with users message
- * ouput: none
- *
- * return: true if no problems occures, false if failed to send
- */
 int WNC14A2AInterface::sendIOTSms(const string& number, const string& message) 
 {
 
     debugOutput("ENTER sendIOTSms(%s,%s)",number.c_str(), message.c_str());
-    _pwnc_mutex.lock();
+    _pwncSem.wait();
     int i =  _pwnc->sendSMSText((char*)number.c_str(), message.c_str());
-    _pwnc_mutex.unlock();
+    _pwncSem.release();
 
     debugOutput("EXIT sendIOTSms(%s,%s)",number.c_str(), message.c_str());
     return i;
 }
 
 
-/*-------------------------------------------------------------------------
- * Register a callback on state change of the socket.FROM NetworkStack
- *  @param handle       Socket handle
- *  @param callback     Function to call on state change
- *  @param data         Argument to pass to callback
- *  @note Callback may be called in an interrupt context.
- */
 void WNC14A2AInterface::socket_attach(void *handle, void (*callback)(void *), void *data)
 {
     WNCSOCKET *wnc = (WNCSOCKET *)handle;
@@ -774,9 +558,6 @@ void WNC14A2AInterface::socket_attach(void *handle, void (*callback)(void *), vo
     wnc->_cb_data = data;
 }
 
-//-------------------------------------------------------------------------
-//sends data to a UDP socket
-//
 int WNC14A2AInterface::socket_sendto(void *handle, const SocketAddress &address, const void *data, unsigned size)
 {
     WNCSOCKET *wnc = (WNCSOCKET *)handle;
@@ -794,15 +575,10 @@ int WNC14A2AInterface::socket_sendto(void *handle, const SocketAddress &address,
     return socket_send(wnc, data, size);
 }
 
-//-------------------------------------------------------------------------
-//receives from a UDP socket
-// *address is the addres that this data is from
-// *buffer is the data that was sent
-// size is the numbr of bytes in the buffer
 int WNC14A2AInterface::socket_recvfrom(void *handle, SocketAddress *address, void *buffer, unsigned size)
 {
     WNCSOCKET *wnc = (WNCSOCKET *)handle;
-    debugOutput("ENTER socket_recvfrom(%p, %p, %p, %d) called", handle, address, buffer, size);
+    debugOutput("ENTER socket_recvfrom()");
 
     if (!wnc->_wnc_opened) {
        debugOutput("need to open a WNC socket first");
@@ -814,143 +590,10 @@ int WNC14A2AInterface::socket_recvfrom(void *handle, SocketAddress *address, voi
     int ret = socket_recv(wnc, (char *)buffer, size);
     if (ret >= 0 && address) 
         *address = wnc->addr;
-    debugOutput("EXIT socket_recvfrom(%p, %p, %p, %d) called", handle, address, buffer, size);
+    debugOutput("EXIT socket_recvfrom()");
     return ret;
 }
 
-
-/**
-* Receives data from the WNC14A2A and returns it to the caller
-* @author James Flynn
-* @param  handle     The socket number to use (currently only uses 1)
-* @param  data       Pointer to users receive buffer
-* @param  size       Max Number of bytes to receive
-* @return int        Number of bytes being returned
-* @date 1-Feb-2018
-*/
-int WNC14A2AInterface::socket_recv(void *handle, void *data, unsigned size) 
-{
-    WNCSOCKET *wnc = (WNCSOCKET *)handle;
-
-    debugOutput("ENTER socket_recv(), requesting %d bytes",size);
-
-    if (!_pwnc || m_active_socket == -1) 
-        return (_errors = NSAPI_ERROR_NO_SOCKET);
-
-    if( size < 1 || data == NULL ) { // should never happen
-        debugOutput("requested 0 bytes, m_recv_wnc_state=%d",m_recv_wnc_state);
-        return 0; 
-        }
-
-    _pwnc_mutex.lock();
-    switch( m_recv_wnc_state ) {
-        case READ_START:  //need to start a read sequence of events
-            m_recv_socket   = wnc->socket; //just in case sending to a socket that wasn't last used
-            m_recv_dptr     = (uint8_t*)data;
-            m_recv_orig_size= size;
-            m_recv_total_cnt= 0;
-            m_recv_timer    = 0;
-            m_recv_events   = 1;
-            m_recv_req_size = (uint32_t)size;
-            m_recv_return_cnt=0;
-
-            if( m_recv_req_size > WNC_BUFF_SIZE) {
-                m_recv_events  =  ((uint32_t)size/WNC_BUFF_SIZE);
-                m_recv_req_size= WNC_BUFF_SIZE;
-                }
-            m_recv_callback = wnc->_callback;
-            m_recv_cb_data  = wnc->_cb_data;
-            m_recv_wnc_state = READ_ACTIVE;
-            recv_queue.call(mbed::Callback<void()>((WNC14A2AInterface*)this,&WNC14A2AInterface::handle_recv_event));
-            _pwnc_mutex.unlock();
-            return NSAPI_ERROR_WOULD_BLOCK;
-
-        case DATA_AVAILABLE:
-            debugOutput("EXIT socket_recv(), return %d bytes",m_recv_return_cnt);
-            debugDump_arry((const uint8_t*)data,m_recv_return_cnt);
-            m_recv_wnc_state = READ_START;
-            _pwnc_mutex.unlock();
-            return m_recv_return_cnt;
-
-        case READ_ACTIVE:
-            _pwnc_mutex.unlock();
-            return NSAPI_ERROR_WOULD_BLOCK;
-
-        default:
-            _pwnc_mutex.unlock();
-            debugOutput("EXIT socket_recv(), NSAPI_ERROR_DEVICE_ERROR");
-            return (_errors = NSAPI_ERROR_DEVICE_ERROR);
-        }
-}
-
-/**
-* The EventQueue handler which receives and processes incomming data 
-* @author James Flynn
-* @param  none. 
-* @return void
-* @date 1-Feb-2018
-*/
-void WNC14A2AInterface::handle_recv_event()
-{
-    debugOutput("ENTER handle_recv_event()");
-    _pwnc_mutex.lock();
-
-    if( m_recv_wnc_state != READ_ACTIVE ) {
-        _pwnc_mutex.unlock();
-        return;
-        }
-
-    int cnt = _pwnc->read(m_recv_socket, m_recv_dptr,  m_recv_req_size);
-
-    if( cnt ) {
-        m_recv_dptr += cnt;
-        m_recv_total_cnt += cnt;
-        m_recv_req_size = m_recv_orig_size-m_recv_total_cnt;
-        if( m_recv_req_size > WNC_BUFF_SIZE )
-            m_recv_req_size = WNC_BUFF_SIZE;
-        --m_recv_events;
-        m_recv_timer = 0;  //restart the timer
-        }
-    else if( ++m_recv_timer > (WNC14A2A_READ_TIMEOUTMS/READ_EVERYMS) ) {
-        //didn't get all requested data and we timed out waiting
-        debugOutput("EXIT handle_recv_event(), TIME-OUT! Recived %d bytes, original request=%d",m_recv_total_cnt, m_recv_orig_size);
-        m_recv_return_cnt = m_recv_total_cnt;
-        m_recv_wnc_state = DATA_AVAILABLE;
-        if( m_recv_callback != NULL ) 
-            m_recv_callback( m_recv_cb_data );
-        m_recv_cb_data = NULL; 
-        m_recv_callback = NULL;
-        _pwnc_mutex.unlock();
-        return;
-        }
-
-    if( m_recv_events > 0 ) {
-        debugOutput("EXIT handle_recv_event(), sechedule new event for more data.");
-        recv_queue.call_in(READ_EVERYMS,mbed::Callback<void()>((WNC14A2AInterface*)this,&WNC14A2AInterface::handle_recv_event));
-        }
-    else {
-        debugOutput("EXIT handle_recv_event(), data available.");
-        m_recv_return_cnt = m_recv_total_cnt;
-        m_recv_wnc_state = DATA_AVAILABLE;
-        if( m_recv_callback != NULL ) 
-            m_recv_callback( m_recv_cb_data );
-        m_recv_cb_data = NULL;
-        m_recv_callback = NULL;
-        }
-    _pwnc_mutex.unlock();
-    return;
-}
-
-
-//
-//-------------------------------------------------------------------------
-//-------------------------------------------------------------------------
-//-------------------------------------------------------------------------
-//      NetworkStack API's that are not support in the WNC14A2A
-//-------------------------------------------------------------------------
-//-------------------------------------------------------------------------
-//-------------------------------------------------------------------------
-//
 
 int inline WNC14A2AInterface::socket_accept(nsapi_socket_t server, nsapi_socket_t *handle, SocketAddress *address) 
 {
@@ -974,53 +617,34 @@ int inline WNC14A2AInterface::socket_listen(void *handle, int backlog)
     return -1;
 }
 
-//
-//-------------------------------------------------------------------------
-//-------------------------------------------------------------------------
-//-------------------------------------------------------------------------
-//      Debug Helpers
-//-------------------------------------------------------------------------
-//-------------------------------------------------------------------------
-//-------------------------------------------------------------------------
-//
-
-/**
-* function that allows a caller to set various levels of debug output
-* @author James Flynn
-* @param  v    a bitfield indicating output to provide
-* @note            basic AT command info= 0x01
-* @note            more AT command info = 0x02
-* @note            mbed driver info     = 0x04
-* @note            dump buffers         = 0x08
-* @note            all debug            = 0x0f
-* @return void
-* @date 1-Feb-2018
-*/
 void WNC14A2AInterface::doDebug( int v )
 {
+    #if MBED_CONF_APP_WNC_DEBUG == true
     if( !_pwnc )
         _errors = NSAPI_ERROR_DEVICE_ERROR;
     else {
-        _pwnc_mutex.lock();
+        _pwncSem.wait();
         _pwnc->enableDebug( (v&1), (v&2) );
-        _pwnc_mutex.unlock();
+        _pwncSem.release();
         }
 
     m_debug= v;
 
     debugOutput("SET debug flag to 0x%02X",v);
+    #endif
 }
 
-/**
-* function that dumps a user provided array.
+/** function to dump a user provided array.
+*
 * @author James Flynn
 * @param  data    pointer to the data array to dump
 * @param  size    number of bytes to dump
 * @return void
 * @date 1-Feb-2018
 */
-void WNC14A2AInterface::debugDump_arry( const uint8_t* data, unsigned int size )
+void WNC14A2AInterface::_dbDump_arry( const uint8_t* data, unsigned int size )
 {
+    #if MBED_CONF_APP_WNC_DEBUG == true
     char buffer[256];
     unsigned int i, k;
 
@@ -1040,19 +664,12 @@ void WNC14A2AInterface::debugDump_arry( const uint8_t* data, unsigned int size )
             _debugUart->puts("\n\r");
             }
         }
+    #endif
 }
 
-/**
-* function to allow for writing debug messages.  It always checks to see if debug has 
-* been enabled or not before it outputs the message.
-* @author James Flynn
-* @param  format     a string containign the output format
-* @param  ...        parameters used when printing
-* @return void
-* @date 1-Feb-2018
-*/
-void WNC14A2AInterface::debugOutput(const char *format, ...) 
+void WNC14A2AInterface::_dbOut(const char *format, ...) 
 {
+    #if MBED_CONF_APP_WNC_DEBUG == true
     char buffer[256];
 
     sprintf(buffer,"[WNC Driver]: ");
@@ -1065,5 +682,224 @@ void WNC14A2AInterface::debugOutput(const char *format, ...)
         _debugUart->putc('\n');
         va_end (args);
         }
+    #endif
+}
+
+int WNC14A2AInterface::socket_recv(void *handle, void *data, unsigned size) 
+{
+    WNCSOCKET *wnc = (WNCSOCKET *)handle;
+
+    debugOutput("ENTER socket_recv(), request %d bytes",size);
+
+    if (!_pwnc || m_active_socket == -1) 
+        return (_errors = NSAPI_ERROR_NO_SOCKET);
+
+    if( size < 1 || data == NULL )  // should never happen
+        return 0; 
+
+    switch( m_recv_wnc_state ) {
+        case READ_START:  //need to start a read sequence of events
+            m_recv_wnc_state = READ_INIT;
+            m_recv_socket   = wnc->socket; //just in case sending to a socket that wasn't last used
+            m_recv_dptr     = (uint8_t*)data;
+            m_recv_orig_size= size;
+            m_recv_total_cnt= 0;
+            m_recv_timer    = 0;
+            m_recv_events   = 1;
+            m_recv_req_size = (uint32_t)size;
+            m_recv_return_cnt=0;
+
+            if( m_recv_req_size > WNC_BUFF_SIZE) {
+                m_recv_events  =  ((uint32_t)size/WNC_BUFF_SIZE);
+                m_recv_req_size= WNC_BUFF_SIZE;
+                }
+            m_recv_callback = wnc->_callback;
+            m_recv_cb_data  = wnc->_cb_data;
+
+            if( !rx_event() ){
+                m_recv_wnc_state = READ_ACTIVE;
+                isr_queue.call_in(ISR_FREQ,mbed::Callback<void()>((WNC14A2AInterface*)this,&WNC14A2AInterface::wnc_isr_event));
+                return NSAPI_ERROR_WOULD_BLOCK;
+                }
+            //was able to get the requested data in a single transaction so fall thru and finish
+            //no need to schedule the background task
+
+        case DATA_AVAILABLE:
+            debugOutput("EXIT socket_recv(), return %d bytes",m_recv_return_cnt);
+            debugDump_arry((const uint8_t*)data,m_recv_return_cnt);
+            m_recv_wnc_state = READ_START;
+            return m_recv_return_cnt;
+
+        case READ_INIT:
+        case READ_ACTIVE:
+            return NSAPI_ERROR_WOULD_BLOCK;
+
+        default:
+            debugOutput("EXIT socket_recv(), NSAPI_ERROR_DEVICE_ERROR");
+            return (_errors = NSAPI_ERROR_DEVICE_ERROR);
+        }
+}
+
+
+int WNC14A2AInterface::socket_send(void *handle, const void *data, unsigned size) 
+{
+    WNCSOCKET *wnc = (WNCSOCKET *)handle;
+
+    debugOutput("ENTER socket_send() send %d bytes",size);
+
+    if (!_pwnc || m_active_socket == -1) {
+        _errors = NSAPI_ERROR_NO_SOCKET;
+        return 0;
+        }
+    else
+        m_active_socket = wnc->socket; //just in case sending to a socket that wasn't last used
+
+    if( size < 1 || data == NULL )  // should never happen
+        return 0; 
+
+    switch( m_tx_wnc_state ) {
+        case TX_IDLE:
+            m_tx_wnc_state = TX_STARTING;
+            debugDump_arry((const uint8_t*)data,size);
+            m_tx_socket    = wnc->socket; //just in case sending to a socket that wasn't last used
+            m_tx_dptr      = (uint8_t*)data;
+            m_tx_orig_size = size;
+            m_tx_req_size  = (uint32_t)size;
+            m_tx_total_sent= 0;
+            m_tx_callback  = wnc->_callback;
+            m_tx_cb_data   = wnc->_cb_data;
+
+            if( m_tx_req_size > UART_BUFF_SIZE ) 
+                m_tx_req_size= UART_BUFF_SIZE;
+
+            if( !tx_event() ) {   //if we didn't sent all the data at once, continue in background
+                m_tx_wnc_state = TX_ACTIVE;
+                isr_queue.call_in(ISR_FREQ,mbed::Callback<void()>((WNC14A2AInterface*)this,&WNC14A2AInterface::wnc_isr_event));
+                return NSAPI_ERROR_WOULD_BLOCK;
+                }
+            //all data sent so fall through to TX_COMPLETE
+
+        case TX_COMPLETE:
+            debugOutput("EXIT socket_send(), sent %d bytes", m_tx_total_sent);
+            m_tx_wnc_state = TX_IDLE;
+            return m_tx_total_sent;
+
+        case TX_ACTIVE:
+        case TX_STARTING:
+            return NSAPI_ERROR_WOULD_BLOCK;
+
+        default:
+            debugOutput("EXIT socket_send(), NSAPI_ERROR_DEVICE_ERROR");
+            return (_errors = NSAPI_ERROR_DEVICE_ERROR);
+        }
+}
+
+
+void WNC14A2AInterface::wnc_isr_event()
+{
+    int done = 1;
+
+    debugOutput("ENTER wnc_isr_event()");
+
+    if( m_recv_wnc_state == READ_ACTIVE ) 
+        done &= rx_event();
+    if( m_tx_wnc_state == TX_ACTIVE )
+        done &= tx_event();
+
+    if( !done ) 
+        isr_queue.call_in(ISR_FREQ,mbed::Callback<void()>((WNC14A2AInterface*)this,&WNC14A2AInterface::wnc_isr_event));
+
+    debugOutput("EXIT wnc_isr_event()");
+}
+
+
+int WNC14A2AInterface::tx_event()
+{
+    debugOutput("ENTER tx_event()");
+
+    _pwncSem.wait();
+    if( _pwnc->write(m_tx_socket, m_tx_dptr, m_tx_req_size) ) {
+        m_tx_total_sent += m_tx_req_size;
+        }
+    else{
+        debugOutput("tx_event WNC failed to send()");
+        CHK_WNCFE((_pwnc->getWncStatus()==FATAL_FLAG), resume);
+        }
+    CHK_WNCFE((_pwnc->getWncStatus()==FATAL_FLAG), resume);
+    _pwncSem.release();
+    
+    if( m_tx_total_sent < m_tx_orig_size ) {
+        m_tx_dptr += m_tx_req_size;
+        m_tx_req_size = m_tx_orig_size-m_tx_total_sent;
+
+        if( m_tx_req_size > UART_BUFF_SIZE) 
+            m_tx_req_size= UART_BUFF_SIZE;
+
+        debugOutput("EXIT tx_event(), need to send %d more bytes.",m_tx_req_size);
+        return 0;
+        }
+    debugOutput("EXIT tx_event, data sent");
+    m_tx_wnc_state = TX_COMPLETE;
+    if( m_tx_callback != NULL ) 
+        m_tx_callback( m_tx_cb_data );
+    m_tx_cb_data = NULL; 
+    m_tx_callback = NULL;
+
+    return 1;
+}
+
+int WNC14A2AInterface::rx_event()
+{
+    uint32_t k;
+
+    debugOutput("ENTER rx_event()");
+    _pwncSem.wait();
+    int cnt = _pwnc->read(m_recv_socket, m_recv_dptr,  m_recv_req_size);
+    CHK_WNCFE((_pwnc->getWncStatus()==FATAL_FLAG), resume);
+    _pwncSem.release();
+    if( cnt ) {
+        m_recv_dptr += cnt;
+        m_recv_total_cnt += cnt;
+        m_recv_req_size = m_recv_orig_size-m_recv_total_cnt;
+        if( m_recv_req_size > WNC_BUFF_SIZE )
+            m_recv_req_size = WNC_BUFF_SIZE;
+        --m_recv_events;
+        m_recv_timer = 0;  //restart the timer
+        }
+    else if( ++m_recv_timer > (WNC14A2A_READ_TIMEOUTMS/ISR_FREQ) ) {
+        //didn't get all requested data and we timed out waiting
+        CHK_WNCFE((_pwnc->getWncStatus()==FATAL_FLAG), resume);
+        debugOutput("EXIT rx_event(), TIME-OUT!");
+        k = m_recv_return_cnt = m_recv_total_cnt;
+        m_recv_wnc_state = DATA_AVAILABLE;
+        if( m_recv_callback != NULL ) 
+            m_recv_callback( m_recv_cb_data );
+        m_recv_cb_data = NULL; 
+        m_recv_callback = NULL;
+        m_recv_return_cnt = k;
+        return 1;
+        }
+    else{
+        debugOutput("wnc returned 0 bytes");
+        }
+
+    if( m_recv_events > 0 ) {
+        debugOutput("EXIT rx_event() but sechedule for more data.");
+        return 0;
+        }
+    else if( m_recv_total_cnt >= m_recv_orig_size ){
+        k = m_recv_return_cnt = m_recv_total_cnt;  //save because the callback func may call RX again on us
+        debugOutput("EXIT rx_event(), data available.");
+        m_recv_wnc_state = DATA_AVAILABLE;  
+        if( m_recv_callback != NULL ) 
+            m_recv_callback( m_recv_cb_data );
+        m_recv_cb_data = NULL;
+        m_recv_callback = NULL;
+        m_recv_return_cnt = k;
+        return 1;
+        }
+     else
+        return 0;
+     
 }
 

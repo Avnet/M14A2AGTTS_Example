@@ -96,7 +96,8 @@ public:
      * @return none.
      */
     WncController(void);
-    
+    virtual ~WncController()=0;
+
     /**
      *
      * Used internally but also make public for a user of the Class to 

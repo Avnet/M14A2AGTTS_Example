@@ -157,6 +157,8 @@ WncController::WncController(void)
         m_sSock[i] = defaultSockStruct;
 }
 
+WncController::~WncController(void) {};
+
 void WncController::enableDebug(bool on, bool moreDebugOn)
 {
     m_sDebugEnabled = on;
