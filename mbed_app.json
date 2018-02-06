@@ -2,7 +2,7 @@
     "config": {
         "network-interface":{
             "help": "Options are WNC14A2A",
-            "value": "WNC14A2A"
+            "value": "CELLULAR_WNC14A2A"
         },
         "wnc_debug": {
             "help" : "enable or disable WNC debug messages.",
