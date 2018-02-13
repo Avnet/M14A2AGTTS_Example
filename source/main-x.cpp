@@ -179,7 +179,7 @@ void test_http(NetworkInterface *net)
 
     printf(" >>>First, lets get a page from http://developer.mbed.org\n");
     {
-        HttpRequest* get_req = new HttpRequest(socket,HTTP_GET,"http://developer.mbed.org/media/uploads/mbed_official/hello.txt");
+        HttpRequest* get_req = new HttpRequest(socket,HTTP_GET,"https://os.mbed.com/media/uploads/mbed_official/hello.txt");
         HttpResponse* get_res = get_req->send();
         if (!get_res) {
             printf("HttpRequest failed (error code %d)\n", get_req->get_error());
