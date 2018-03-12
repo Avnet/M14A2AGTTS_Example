@@ -10,7 +10,7 @@
         },
         "wnc_debug_setting": {
             "help" : "bit value 1 and/or 2 enable WncController debug output, bit value 4 enables mbed driver debug output.",
-            "value": "4"
+            "value": "0x0c"
         }
     }
 }

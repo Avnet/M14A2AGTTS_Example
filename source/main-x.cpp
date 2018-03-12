@@ -31,6 +31,7 @@
 #include "easy-connect.h"
 #include "http_request.h"
 #include "https_request.h"
+#include "WNC14A2AInterface.h"
 
 #define STREAM_CNT  10          //when we test streaming, this is how many times to stream the string
 #define STR_SIZE    150*(STREAM_CNT+1) //use a fixed size string buffer based on the streaming data count
@@ -116,8 +117,8 @@ void https_test_thread(void) {
         printf("Unable to connect to network!\n");
         return;
         }
-     else
-        printf("My IP Address is: %s \n\n", network->get_ip_address());
+    printf("My IP Address is: %s \n\n", network->get_ip_address());
+    printf("Modem SW Revision: %s\n", FIRMWARE_REV(network));
 
     test_http(network);
     test_https(network);
