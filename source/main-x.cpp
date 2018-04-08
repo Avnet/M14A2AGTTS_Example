@@ -83,8 +83,6 @@ const char SSL_CA_PEM[] = "-----BEGIN CERTIFICATE-----\n"
 // to work effeciently. 
 //
 
-Serial pc(USBTX, USBRX);
-
 //
 // The two test functions do the same set of tests, the first one uses standard HTTP methods while
 // the second test uses HTTPS.
@@ -94,15 +92,15 @@ void https_test_thread(void);             //Thread that runs the two tests
 void test_http(NetworkInterface *net);    //function makes standard HTTP calls
 void test_https(NetworkInterface *net);   //function makes standard HTTPS calls
 
+Thread http_test(osPriorityNormal, 4*1024, NULL);
+
 int main() {
-    Thread http_test(osPriorityNormal, OS_STACK_SIZE*4, NULL);
-    pc.baud(115200);
 
     printf("Test HTTP and HTTPS interface\n");
     http_test.start(https_test_thread);
-    while (true) {
-        osDelay(500);
-    }
+    wait(5);
+    http_test.join();
+    printf(" - - - - - - - ALL DONE - - - - - - - \n");
 }
 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
@@ -122,12 +120,8 @@ void https_test_thread(void) {
 
     test_http(network);
     test_https(network);
-    
-    printf(" - - - - - - - ALL DONE - - - - - - - \n");
 
     network->disconnect();
-    delete network;
-    Thread::wait(osWaitForever);
 }
 
 
