@@ -447,6 +447,8 @@ After the basic application has been verified, build for the Greentea test suite
    you need to build and run tests. Note that this only affects building and running tests.
 
    So, rename the application source file 'source/main-x.cpp' to 'source/main-x.keepcpp'.
+   UPDATE: it is easier to add a ".mbedignore" file to the main directory and insert "source/*". This instructs
+   the compiler to ignore the files in the source directory.
 
 2. Execute the command: **mbed test -m K64F -t GCC_ARM -c --test-config wnc_config.json -n mbed-os-tests-netsocket-\***
    When running the test suite, it programs different test files into the hardware to run so execution will take
